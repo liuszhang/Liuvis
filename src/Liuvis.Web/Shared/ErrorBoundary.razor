@@ -1,0 +1,9 @@
+@using MudBlazor
+
+<MudAlert Severity="Severity.Error" Class="ma-4" Variant="Variant.Filled">
+    An unexpected error occurred. Please refresh the page.
+</MudAlert>
+
+@code {
+    [Parameter] public string? Message { get; set; }
+}

@@ -1,0 +1,14 @@
+.js-canvas-host {
+    background: #0a0e1a;
+    background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    overflow: hidden;
+}
+
+.viewer-placeholder {
+    /* Positioning is handled by inline style (absolute + inset:0 + flex center).
+       Only keep non-conflicting decorative properties here. */
+    opacity: 0.7;
+}

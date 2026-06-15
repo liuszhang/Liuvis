@@ -1,0 +1,18 @@
+<MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+    <MudTooltip Text="Download Model">
+        <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small" Color="Color.Inherit" />
+    </MudTooltip>
+    <MudTooltip Text="Share">
+        <MudIconButton Icon="@Icons.Material.Filled.Share" Size="Size.Small" Color="Color.Inherit" />
+    </MudTooltip>
+    <MudTooltip Text="Save to Library">
+        <MudIconButton Icon="@Icons.Material.Filled.Bookmark" Size="Size.Small" Color="Color.Inherit" />
+    </MudTooltip>
+    <MudTooltip Text="Reset View">
+        <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" Size="Size.Small" Color="Color.Inherit" />
+    </MudTooltip>
+</MudButtonGroup>
+
+@code {
+    [Parameter] public Guid SessionId { get; set; }
+}

@@ -1,0 +1,15 @@
+<div class="message-bubble @(Message.Role == "user" ? "user" : "assistant") @(Message.IsError ? "error" : "")">
+    <div class="message-avatar">
+        <MudAvatar Size="Size.Small" Color="@(Message.Role == "user" ? Color.Tertiary : Color.Primary)">
+            @(Message.Role == "user" ? "U" : "AI")
+        </MudAvatar>
+    </div>
+    <div class="message-content">
+        <MudText Typo="Typo.body2" Class="message-text">@Message.Content</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@Message.Timestamp.ToString("HH:mm")</MudText>
+    </div>
+</div>
+
+@code {
+    [Parameter] public ChatPanel.ChatMessageVm Message { get; set; } = new();
+}

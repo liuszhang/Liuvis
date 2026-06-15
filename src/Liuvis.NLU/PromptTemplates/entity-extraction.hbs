@@ -1,0 +1,17 @@
+Extract detailed entities from the following user message about 3D design.
+
+Entity types to extract:
+- object_type: The type of 3D object mentioned
+- color: Color specification (names or hex codes)
+- material: Material specification
+- dimensions: Size/dimensions (e.g., "10cm tall", "large")
+- quantity: Number of objects
+- property: Other specific properties
+- action: The action to perform (create, change, add, remove)
+
+Respond with valid JSON array only:
+[
+  { "Type": "entity_type", "Value": "extracted value", "Start": char_index, "End": char_index }
+]
+
+User input: {{input}}

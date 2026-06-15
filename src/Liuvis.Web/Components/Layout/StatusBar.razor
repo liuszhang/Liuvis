@@ -1,0 +1,10 @@
+<MudStack Row="true" Class="mr-4">
+    <MudText Typo="Typo.caption" Color="_isConnected ? Color.Success : Color.Error">
+        @StatusLabel
+    </MudText>
+</MudStack>
+
+@code {
+    private bool _isConnected = true;
+    private string StatusLabel => _isConnected ? "● Connected" : "○ Disconnected";
+}

@@ -1,0 +1,15 @@
+@using MudBlazor
+
+@if (IsVisible)
+{
+    <MudOverlay Visible="true" DarkBackground="true" ZIndex="1500">
+        <div class="loading-overlay-content">
+            <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.h6" Class="mt-4">Processing...</MudText>
+        </div>
+    </MudOverlay>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+}

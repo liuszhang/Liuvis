@@ -1,0 +1,111 @@
+@inject ISessionManager SessionManager
+@inject INluService NluService
+@inject NavigationManager Navigation
+
+<MudCard Elevation="2" Class="chat-panel">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Design Assistant</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Describe your 3D model idea</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <ActionButtons SessionId="@SessionId" />
+        </CardHeaderActions>
+    </MudCardHeader>
+
+    <MudCardContent Class="chat-messages pa-4">
+        @foreach (var msg in _messages)
+        {
+            <MessageBubble Message="msg" />
+        }
+        <div @ref="_scrollRef"></div>
+    </MudCardContent>
+
+    <MudCardActions Class="pa-3">
+        <ChatInput OnSend="SendMessageAsync" IsDisabled="_isSending" />
+    </MudCardActions>
+</MudCard>
+
+@code {
+    [Parameter] public Guid SessionId { get; set; }
+    [Parameter] public EventCallback<ModelReadyArgs> OnModelReady { get; set; }
+
+    private List<ChatMessageVm> _messages = new();
+    private bool _isSending;
+    private ElementReference _scrollRef;
+
+    private async Task SendMessageAsync(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        _isSending = true;
+
+        _messages.Add(new ChatMessageVm { Role = "user", Content = text, Timestamp = DateTime.Now });
+
+        try
+        {
+            using var httpClient = new HttpClient { BaseAddress = new Uri(Navigation.BaseUri) };
+            var response = await httpClient.PostAsJsonAsync("/api/chat", new { SessionId, Message = text });
+            var result = await response.Content.ReadFromJsonAsync<ApiResponseWrapper>();
+
+            if (result?.Data != null)
+            {
+                var msg = new ChatMessageVm
+                {
+                    Role = "assistant",
+                    Content = result.Data.AssistantMessage,
+                    Timestamp = DateTime.Now,
+                    ModelId = result.Data.ModelId,
+                    Type = result.Data.Type
+                };
+                _messages.Add(msg);
+
+                if (result.Data.Type == "model_ready" && OnModelReady.HasDelegate)
+                {
+                    await OnModelReady.InvokeAsync(new ModelReadyArgs(
+                        $"/storage/{result.Data.ModelId}.glb",
+                        new List<ComponentVm>()));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessageVm
+            {
+                Role = "assistant",
+                Content = $"Error: {ex.Message}",
+                Timestamp = DateTime.Now,
+                IsError = true
+            });
+        }
+        finally
+        {
+            _isSending = false;
+        }
+    }
+
+    public class ChatMessageVm
+    {
+        public string Role { get; set; } = "user";
+        public string Content { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+        public Guid? ModelId { get; set; }
+        public string Type { get; set; } = "text";
+        public bool IsError { get; set; }
+    }
+
+    public class ApiResponseWrapper
+    {
+        public int Code { get; set; }
+        public ChatData? Data { get; set; }
+    }
+
+    public class ChatData
+    {
+        public Guid SessionId { get; set; }
+        public Guid MessageId { get; set; }
+        public string AssistantMessage { get; set; } = string.Empty;
+        public string Type { get; set; } = "text";
+        public Guid? ModelId { get; set; }
+        public string? ModelName { get; set; }
+    }
+}

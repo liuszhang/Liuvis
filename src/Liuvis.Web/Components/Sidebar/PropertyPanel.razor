@@ -1,0 +1,35 @@
+<MudForm>
+    <MudStack Spacing="3" Class="pa-2">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Component Properties</MudText>
+
+        @if (SelectedComponent != null)
+        {
+            <MudTextField Label="Name" Value="@SelectedComponent.Name" ReadOnly="true" Variant="Variant.Outlined" />
+            <MudTextField Label="Type" Value="@SelectedComponent.GeometryType" ReadOnly="true" Variant="Variant.Outlined" />
+            <MudColorPicker Label="Color" Value="@_currentColor" ValueChanged="OnColorChanged" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Select a component to view properties</MudText>
+        }
+    </MudStack>
+</MudForm>
+
+@code {
+    [Parameter] public ComponentVm? SelectedComponent { get; set; }
+    [Parameter] public EventCallback<PropertyChangedArgs> OnPropertyChanged { get; set; }
+
+    private MudBlazor.Utilities.MudColor _currentColor = new("#ffffff");
+
+    protected override void OnParametersSet()
+    {
+        if (SelectedComponent?.Color != null)
+            _currentColor = new MudBlazor.Utilities.MudColor(SelectedComponent.Color);
+    }
+
+    private async Task OnColorChanged(MudBlazor.Utilities.MudColor color)
+    {
+        _currentColor = color;
+        await OnPropertyChanged.InvokeAsync(new PropertyChangedArgs(color.ToString(), null));
+    }
+}
