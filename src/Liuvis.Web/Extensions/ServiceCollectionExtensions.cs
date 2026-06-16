@@ -13,6 +13,7 @@ using Liuvis.Generation.Services;
 using Liuvis.Generation.Geometry;
 using Liuvis.Modification.Services;
 using Liuvis.KnowledgeBase.Services;
+using Liuvis.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Liuvis.Web.Extensions;
@@ -55,8 +56,19 @@ public static class ServiceCollectionExtensions
         // ---------------------------------------------------------------------
         services.AddScoped<ILlmClient>(sp =>
         {
-            var settings = sp.GetRequiredService<ISettingsService>()
-                .GetLlmSettingsAsync().GetAwaiter().GetResult();
+            LlmSettings settings;
+            try
+            {
+                settings = sp.GetRequiredService<ISettingsService>()
+                    .GetLlmSettingsAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                var fallbackLogger = sp.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Liuvis.Web");
+                fallbackLogger.LogWarning(ex, "Failed to load LLM settings from DB, using defaults");
+                settings = new Liuvis.Core.Interfaces.LlmSettings();
+            }
 
             if (settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.OpenAIApiKey))
             {
@@ -123,6 +135,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IModelGenerator, ModelGenerator>();
         services.AddScoped<IModificationEngine, ModificationEngine>();
         services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
+
+        // ---------------------------------------------------------------------
+        // Orchestration Services (Blazor-friendly pipeline wrappers)
+        // ---------------------------------------------------------------------
+        services.AddScoped<ChatOrchestrationService>();
 
         // ---------------------------------------------------------------------
         // Configuration

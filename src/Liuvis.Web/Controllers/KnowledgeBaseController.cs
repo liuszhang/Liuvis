@@ -36,9 +36,33 @@ public class KnowledgeBaseController : ControllerBase
         return Ok(ApiResponse<List<object>>.Ok(data.Cast<object>().ToList()));
     }
 
-    [HttpPost("models")]
-    public async Task<ActionResult<ApiResponse<Guid>>> SaveModel()
+    [HttpGet("models/{id:guid}")]
+    public async Task<ActionResult<ApiResponse<object>>> GetModel(Guid id)
     {
-        return BadRequest(ApiResponse<Guid>.Error(400, "Model saving from API not yet implemented."));
+        var model = await _kbService.GetModel(id);
+        if (model == null)
+            return NotFound(ApiResponse<object>.Error(404, "Model not found."));
+
+        var data = new
+        {
+            model.ModelId,
+            model.Name,
+            model.Description,
+            ComponentCount = model.Components.Count,
+            model.Tags,
+            model.CreatedAt
+        };
+
+        return Ok(ApiResponse<object>.Ok(data));
+    }
+
+    [HttpPost("models/{id:guid}/tags")]
+    public async Task<ActionResult<ApiResponse<bool>>> AddTags(Guid id, [FromBody] List<string> tags)
+    {
+        if (tags == null || tags.Count == 0)
+            return BadRequest(ApiResponse<bool>.Error(400, "Tags cannot be empty."));
+
+        await _kbService.AddTags(id, tags);
+        return Ok(ApiResponse<bool>.Ok(true));
     }
 }

@@ -1,8 +1,8 @@
 @page "/"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject ISessionManager SessionManager
+@inject ChatOrchestrationService ChatService
 @inject IJSRuntime JS
-@inject NavigationManager NavigationManager
 @using Liuvis.Web.Components.Viewer
 
 <MudDialogProvider />
@@ -31,9 +31,16 @@
                     <pre style="color:#94a3b8; white-space:pre-wrap; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; margin:0">@_thinking</pre>
                 </details>
             }
+            @foreach (var msg in _chatHistory)
+            {
+                <div style="margin-bottom:8px; padding:8px; border-radius:6px; background:@(msg.IsUser ? "rgba(0,212,255,0.1)" : "rgba(0,255,136,0.05)")">
+                    <span style="font-weight:bold; color:@(msg.IsUser ? "#00d4ff" : "#00ff88")">@(msg.IsUser ? "You" : "AI"):</span>
+                    <span style="color:#cbd5e1; margin-left:6px">@msg.Text</span>
+                </div>
+            }
             @if (!string.IsNullOrEmpty(_response))
             {
-                <div style="color:#00ff88; white-space:pre-wrap">@_response</div>
+                <div style="color:#00ff88; white-space:pre-wrap; padding:8px; border-radius:6px; background:rgba(0,255,136,0.05)">@_response</div>
             }
         </div>
     </div>
@@ -54,6 +61,7 @@
     private string? _sceneData;
     private bool _sending;
     private CancellationTokenSource? _cts;
+    private List<ChatEntry> _chatHistory = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -88,76 +96,34 @@
 
         try
         {
-            var baseUri = NavigationManager.BaseUri.TrimEnd('/');
-            using var http = new HttpClient { BaseAddress = new Uri(baseUri), Timeout = TimeSpan.FromMinutes(5) };
-            var payload = new StringContent(
-                System.Text.Json.JsonSerializer.Serialize(new { SessionId = _sessionId, Message = message }),
-                System.Text.Encoding.UTF8, "application/json");
+            _chatHistory.Add(new ChatEntry(message, true));
 
-            var request = new HttpRequestMessage(HttpMethod.Post, "/api/chat/stream") { Content = payload };
-            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _cts.Token);
-
-            using var stream = await response.Content.ReadAsStreamAsync(_cts.Token);
-            using var reader = new StreamReader(stream);
-
-            while (true)
-            {
-                var line = await reader.ReadLineAsync();
-                if (line == null) break;
-
-                if (line.StartsWith("event: "))
+            var result = await ChatService.ProcessMessageAsync(
+                _sessionId,
+                message,
+                onProgress: status =>
                 {
-                    var eventType = line[7..];
-                    var dataLine = await reader.ReadLineAsync(); // "data: ..."
-                    if (dataLine == null) break;
-                    var data = dataLine.StartsWith("data: ") ? dataLine[6..] : "";
+                    _progress = status;
+                    InvokeAsync(StateHasChanged);
+                },
+                cancellationToken: _cts.Token);
 
-                    switch (eventType)
+            _thinking = result.Thinking ?? "";
+            _response = result.AssistantMessage;
+            _chatHistory.Add(new ChatEntry(result.AssistantMessage, false));
+
+            if (result.Type is "model_ready" or "model_updated" && result.ModelId.HasValue)
+            {
+                _modelUrl = $"/api/model/{result.ModelId}/download";
+
+                if (result.Metadata != null && result.Metadata.TryGetValue("_scene", out var sceneVal))
+                {
+                    _sceneData = sceneVal switch
                     {
-                        case "thinking":
-                            _thinking += data;
-                            _progress = "Thinking...";
-                            StateHasChanged();
-                            break;
-                        case "progress":
-                            _progress = data;
-                            StateHasChanged();
-                            break;
-                        case "complete":
-                            _sending = false;
-                            _progress = "Done";
-                            try
-                            {
-                                var result = System.Text.Json.JsonSerializer.Deserialize<StreamResult>(data);
-                                _response = result?.AssistantMessage ?? "";
-                                _thinking = result?.Thinking ?? _thinking;
-                                if (result?.Type == "model_ready" && result.ModelId != null)
-                                {
-                                    _modelUrl = $"/api/model/{result.ModelId}/download";
-
-                                    // Extract scene JSON for direct Three.js construction
-                                    if (result.Metadata != null && result.Metadata.TryGetValue("_scene", out var sceneVal))
-                                    {
-                                        _sceneData = sceneVal switch
-                                        {
-                                            string s => s,
-                                            System.Text.Json.JsonElement je => je.GetString(),
-                                            _ => null
-                                        };
-                                    }
-                                }
-                            }
-                            catch { _response = "Done"; }
-                            StateHasChanged();
-                            break;
-                        case "error":
-                            _response = $"Error: {data}";
-                            StateHasChanged();
-                            break;
-                    }
-
-                    // Skip empty line after data
-                    await reader.ReadLineAsync();
+                        string s => s,
+                        System.Text.Json.JsonElement je => je.GetString(),
+                        _ => null
+                    };
                 }
             }
         }
@@ -165,21 +131,10 @@
         catch (Exception ex) { _response = $"Error: {ex.Message}"; }
         finally
         {
-            // Only re-render if complete/error didn't already do it (prevents
-            // redundant render that can interfere with ModelViewer's Three.js canvas)
-            if (_sending)
-            {
-                _sending = false;
-                StateHasChanged();
-            }
+            _sending = false;
+            StateHasChanged();
         }
     }
 
-    public record StreamResult(
-        string AssistantMessage,
-        string Type,
-        string? Thinking = null,
-        Guid? ModelId = null,
-        string? ModelName = null,
-        Dictionary<string, object>? Metadata = null);
+    private record ChatEntry(string Text, bool IsUser);
 }

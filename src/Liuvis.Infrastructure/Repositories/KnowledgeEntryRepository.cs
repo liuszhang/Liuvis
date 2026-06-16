@@ -17,17 +17,17 @@ public class KnowledgeEntryRepository
         _logger = logger;
     }
 
-    public async Task<KnowledgeEntry?> GetByIdAsync(Guid entryId, CancellationToken ct = default)
+    public virtual async Task<KnowledgeEntry?> GetByIdAsync(Guid entryId, CancellationToken ct = default)
         => await _db.KnowledgeEntries.FirstOrDefaultAsync(e => e.EntryId == entryId, ct);
 
-    public async Task<KnowledgeEntry> CreateAsync(KnowledgeEntry entry, CancellationToken ct = default)
+    public virtual async Task<KnowledgeEntry> CreateAsync(KnowledgeEntry entry, CancellationToken ct = default)
     {
         _db.KnowledgeEntries.Add(entry);
         await _db.SaveChangesAsync(ct);
         return entry;
     }
 
-    public async Task<List<VectorSearchResult>> SearchByEmbeddingAsync(float[] embedding, int topK = 5, CancellationToken ct = default)
+    public virtual async Task<List<VectorSearchResult>> SearchByEmbeddingAsync(float[] embedding, int topK = 5, CancellationToken ct = default)
     {
         _logger.LogDebug("In-memory vector search: topK={TopK}, dimensions={Dim}", topK, embedding.Length);
 
@@ -77,7 +77,7 @@ public class KnowledgeEntryRepository
         return dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB));
     }
 
-    public async Task UpsertAsync(KnowledgeEntry entry, CancellationToken ct = default)
+    public virtual async Task UpsertAsync(KnowledgeEntry entry, CancellationToken ct = default)
     {
         var existing = await _db.KnowledgeEntries
             .FirstOrDefaultAsync(e => e.ModelId == entry.ModelId, ct);
@@ -93,7 +93,7 @@ public class KnowledgeEntryRepository
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteByModelIdAsync(Guid modelId, CancellationToken ct = default)
+    public virtual async Task DeleteByModelIdAsync(Guid modelId, CancellationToken ct = default)
     {
         var entries = await _db.KnowledgeEntries
             .Where(e => e.ModelId == modelId)
