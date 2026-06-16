@@ -163,7 +163,7 @@ export function initScene(containerId) {
         if (_frameCount === 1) {
             console.log('[three-module] First frame rendered! Scene children:', _scene.children.length);
         }
-        if (_frameCount % 60 === 0) {
+        if (_frameCount % 300 === 0) {
             console.log('[three-module] Frame', _frameCount, '| scene children:', _scene.children.length, '| canvas visible:', _renderer.domElement.offsetParent !== null);
         }
     }
@@ -229,6 +229,13 @@ export function loadModel(glbUrl) {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
+                        // DIAGNOSTIC: read first vertex
+                        const pos = child.geometry.getAttribute('position');
+                        if (pos) {
+                            console.log('[three-module] Mesh geometry: posCount=' + pos.count +
+                                ' 1st vertex=[' + pos.getX(0) + ',' + pos.getY(0) + ',' + pos.getZ(0) + ']' +
+                                ' isNaN=' + isNaN(pos.getX(0)));
+                        }
                     }
                 });
 
@@ -237,21 +244,47 @@ export function loadModel(glbUrl) {
 
                 _scene.add(_currentModel);
 
-                // Fit camera to model bounds
-                const box = new THREE.Box3().setFromObject(_currentModel);
-                const center = box.getCenter(new THREE.Vector3());
-                const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const dist = Math.max(maxDim * 2.5, 10);  // ensure minimum distance
-                _camera.position.set(center.x + dist * 0.5, center.y + dist * 0.4, center.z + dist);
-                _camera.lookAt(center);
-                _controls.target.copy(center);
-                _controls.update();
+                // Diagnostic: compute bounding box manually
+                const box = new THREE.Box3();
+                _currentModel.traverse((child) => {
+                    if (child.isMesh && child.geometry) {
+                        child.geometry.computeBoundingBox();
+                        const childBox = child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld);
+                        console.log('[three-module] Child mesh boundingBox:', 
+                            childBox.min.toArray(), childBox.max.toArray(),
+                            'isEmpty:', childBox.isEmpty());
+                        box.union(childBox);
+                    }
+                });
+                console.log('[three-module] Manual box:', box.min.toArray(), box.max.toArray(), 'isEmpty:', box.isEmpty());
 
-                console.log(`[three-module] Model loaded: ${glbUrl}`);
-                console.log('[three-module] Model bounding box min/max/center/size/maxDim:', 
-                    box.min.toArray(), box.max.toArray(), center.toArray(), size.toArray(), maxDim);
-                console.log('[three-module] Camera new position:', _camera.position.toArray(), 'target:', _controls.target.toArray());
+                if (box.isEmpty() || isNaN(box.min.x)) {
+                    console.warn('[three-module] GLTF bounding box invalid (isEmpty=' + box.isEmpty() + ' minNaN=' + isNaN(box.min.x) + '), using fallback BoxGeometry');
+                    // Remove the broken GLTF model
+                    _scene.remove(_currentModel);
+                    _currentModel = null;
+                    // Create a fallback box directly
+                    const fallbackGeo = new THREE.BoxGeometry(2, 2, 2);
+                    const fallbackMat = new THREE.MeshStandardMaterial({ color: 0x00d4ff, roughness: 0.3, metalness: 0.5 });
+                    const fallbackMesh = new THREE.Mesh(fallbackGeo, fallbackMat);
+                    fallbackMesh.name = 'fallback_box';
+                    const fallbackGroup = new THREE.Group();
+                    fallbackGroup.add(fallbackMesh);
+                    _currentModel = fallbackGroup;
+                    _scene.add(_currentModel);
+                    console.log('[three-module] Fallback box added to scene');
+                } else {
+                    // Fit camera to model bounds
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const dist = Math.max(maxDim * 2.5, 10);
+                    _camera.position.set(center.x + dist * 0.5, center.y + dist * 0.4, center.z + dist);
+                    _camera.lookAt(center);
+                    _controls.target.copy(center);
+                    _controls.update();
+                    console.log('[three-module] Camera moved to:', _camera.position.toArray(), 'target:', center.toArray());
+                }
                 resolve({ success: true, componentCount: _componentMap.size });
             },
             (progress) => {
@@ -400,6 +433,108 @@ export function getSceneSnapshot() {
     };
 
     return JSON.stringify(snapshot);
+}
+
+// ----------------------------------------------------------------
+// buildFromSceneDescription(sceneJson: string)
+// Builds Three.js meshes directly from LLM-generated scene description
+// ----------------------------------------------------------------
+export function buildFromSceneDescription(sceneJson) {
+    console.log('[three-module] buildFromSceneDescription called');
+
+    if (!_scene) {
+        console.error('[three-module] Scene not initialized.');
+        return { success: false, reason: 'no-scene' };
+    }
+
+    try {
+        console.log('[three-module] Scene JSON preview:', sceneJson.substring(0, 200));
+        const desc = JSON.parse(sceneJson);
+        console.log('[three-module] Parsed keys:', Object.keys(desc));
+        // SceneDescription has "Objects" (capital O) from C# serialization
+        const objects = desc.Objects || desc.objects;
+        if (!objects || objects.length === 0) {
+            console.warn('[three-module] Scene description has no objects. desc:', desc);
+            return { success: false, reason: 'no-objects' };
+        }
+
+        // Remove previous model
+        if (_currentModel) {
+            _scene.remove(_currentModel);
+            _componentMap.clear();
+        }
+
+        const group = new THREE.Group();
+        group.name = 'llm-scene';
+
+        objects.forEach((obj, i) => {
+            const type = (obj.Type || obj.type || 'box').toLowerCase();
+            const size = obj.Size || obj.size || [1, 1, 1];
+            const pos = obj.Position || obj.position || [0, 0, 0];
+            const color = obj.Color || obj.color || '#00d4ff';
+            const material = obj.Material || obj.material || { Metalness: 0.5, Roughness: 0.3 };
+            const metalness = material.Metalness ?? material.metalness ?? 0.5;
+            const roughness = material.Roughness ?? material.roughness ?? 0.3;
+
+            let geometry;
+            switch (type) {
+                case 'sphere':
+                case 'ball':
+                    geometry = new THREE.SphereGeometry(
+                        size[0] || 0.5, size[1] || 32, size[2] || 32);
+                    break;
+                case 'cylinder':
+                    geometry = new THREE.CylinderGeometry(
+                        size[0] || 0.5, size[0] || 0.5, size[1] || 2, size[2] || 32);
+                    break;
+                case 'cone':
+                    geometry = new THREE.ConeGeometry(
+                        size[0] || 0.5, size[1] || 2, size[2] || 32);
+                    break;
+                default: // box
+                    geometry = new THREE.BoxGeometry(
+                        size[0] || 1, size[1] || 1, size[2] || 1);
+            }
+
+            const mat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(color),
+                roughness: roughness,
+                metalness: metalness
+            });
+
+            const mesh = new THREE.Mesh(geometry, mat);
+            mesh.name = (obj.Type || 'mesh') + '_' + i;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.position.set(pos[0] || 0, pos[1] || 0, pos[2] || 0);
+            group.add(mesh);
+
+            _componentMap.set(mesh.name, mesh);
+        });
+
+        _currentModel = group;
+        _scene.add(group);
+        _loadedUrl = 'scene:' + objects.length; // prevent re-load
+
+        // Fit camera
+        const box = new THREE.Box3().setFromObject(group);
+        if (!box.isEmpty() && !isNaN(box.min.x)) {
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const dist = Math.max(maxDim * 2.5, 10);
+            _camera.position.set(center.x + dist * 0.5, center.y + dist * 0.4, center.z + dist);
+            _camera.lookAt(center);
+            _controls.target.copy(center);
+            _controls.update();
+            console.log('[three-module] Built scene with', objects.length, 'objects');
+        }
+
+        return { success: true, objectCount: objects.length };
+    } catch (e) {
+        console.error('[three-module] Failed to build scene:', e);
+        return { success: false, reason: e.message };
+    }
 }
 
 // ----------------------------------------------------------------

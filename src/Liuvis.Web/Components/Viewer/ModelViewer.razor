@@ -16,12 +16,14 @@
 
 @code {
     [Parameter] public string? ModelUrl { get; set; }
+    [Parameter] public string? SceneData { get; set; }
     [Parameter] public bool BloomEnabled { get; set; } = true;
 
     private IJSObjectReference? _module;
     private bool _initialized;
     private string _jsContainerId = $"viewer-js-{Guid.NewGuid():N}";
     private string? _loadedUrl;
+    private bool _sceneBuilt;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -43,7 +45,24 @@
             _loadedUrl = ModelUrl;
             await _module.InvokeVoidAsync("loadModel", ModelUrl);
         }
+
+        if (_initialized && !string.IsNullOrEmpty(SceneData) && _module != null && !_sceneBuilt)
+        {
+            _sceneBuilt = true;
+            await _module.InvokeVoidAsync("buildFromSceneDescription", SceneData);
+        }
     }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SceneData != _lastSceneData)
+        {
+            _sceneBuilt = false;
+            _lastSceneData = SceneData;
+        }
+    }
+
+    private string? _lastSceneData;
 
     public async Task HighlightComponent(string componentId)
     {

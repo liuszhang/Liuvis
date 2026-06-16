@@ -40,7 +40,7 @@
 
     @* --- Right Preview Panel --- *@
     <div style="flex:1; position:relative">
-        <ModelViewer ModelUrl="@(_modelUrl ?? "")" />
+        <ModelViewer ModelUrl="@(_modelUrl ?? "")" SceneData="@_sceneData" />
     </div>
 </div>
 
@@ -51,6 +51,7 @@
     private string _thinking = "";
     private string _progress = "Thinking...";
     private string? _modelUrl;
+    private string? _sceneData;
     private bool _sending;
     private CancellationTokenSource? _cts;
 
@@ -78,6 +79,7 @@
         _sending = true;
         _thinking = "";
         _response = "";
+        _sceneData = null;
         _progress = "Thinking...";
         StateHasChanged();
 
@@ -122,7 +124,7 @@
                             StateHasChanged();
                             break;
                         case "complete":
-                            _sending = false;  // set before StateHasChanged so button shows "Send" immediately
+                            _sending = false;
                             _progress = "Done";
                             try
                             {
@@ -132,6 +134,17 @@
                                 if (result?.Type == "model_ready" && result.ModelId != null)
                                 {
                                     _modelUrl = $"/api/model/{result.ModelId}/download";
+
+                                    // Extract scene JSON for direct Three.js construction
+                                    if (result.Metadata != null && result.Metadata.TryGetValue("_scene", out var sceneVal))
+                                    {
+                                        _sceneData = sceneVal switch
+                                        {
+                                            string s => s,
+                                            System.Text.Json.JsonElement je => je.GetString(),
+                                            _ => null
+                                        };
+                                    }
                                 }
                             }
                             catch { _response = "Done"; }
@@ -167,5 +180,6 @@
         string Type,
         string? Thinking = null,
         Guid? ModelId = null,
-        string? ModelName = null);
+        string? ModelName = null,
+        Dictionary<string, object>? Metadata = null);
 }

@@ -49,7 +49,12 @@ public class ModelGenerator : IModelGenerator
                 // Step 2: Build real geometry from scene description
                 glbData = _geometryBuilder.BuildGlb(scene);
 
-                // Step 3: Create model components matching scene objects
+                // Step 3: Store scene JSON for frontend direct Three.js construction
+                var sceneJson = System.Text.Json.JsonSerializer.Serialize(scene,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
+                model.Metadata["_scene"] = sceneJson;
+
+                // Step 4: Create model components matching scene objects
                 foreach (var obj in scene.Objects)
                 {
                     var comp = new ModelComponent(model.ModelId, obj.Type, obj.Type);

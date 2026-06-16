@@ -105,6 +105,10 @@ public class ChatController : ControllerBase
                     var assistantMsg = await _sessionManager.AddMessage(request.SessionId, MessageRole.Assistant,
                         $"Created model: **{model.Name}** with {model.Components.Count} components.");
 
+                    // Serialize scene description for direct Three.js construction in browser
+                    var sceneJson = System.Text.Json.JsonSerializer.Serialize(
+                        spec.Intent.OriginalText, typeof(string)); // placeholder — will use actual scene data
+
                     response = new ChatResponse
                     {
                         SessionId = request.SessionId,
@@ -114,7 +118,10 @@ public class ChatController : ControllerBase
                         ModelId = model.ModelId,
                         ModelName = model.Name,
                         Thinking = intent.Thinking,
-                        Type = "model_ready"
+                        Type = "model_ready",
+                        Metadata = model.Metadata.Count > 0 
+                            ? model.Metadata.ToDictionary(kv => kv.Key, kv => (object)kv.Value) 
+                            : null
                     };
                     break;
 

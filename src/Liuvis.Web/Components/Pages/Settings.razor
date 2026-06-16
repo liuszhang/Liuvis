@@ -60,8 +60,10 @@
                                 <MudItem xs="12" md="6">
                                     <MudTextField @bind-Value="_llm.OpenAIApiKey" Label="API Key"
                                         HelperText="sk-... or custom API key" Variant="Variant.Outlined"
-                                        InputType="InputType.Password"
-                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Key" />
+                                        InputType="@(_showApiKey ? InputType.Text : InputType.Password)"                                        
+                                        Adornment="@(Adornment.End)"
+                                        AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                              OnAdornmentClick="ToggleApiKeyVisibility" />
                                 </MudItem>
                                 <MudItem xs="12" md="3">
                                     <MudTextField @bind-Value="_llm.OpenAIBaseUrl" Label="Base URL"
@@ -122,6 +124,7 @@
     private LlmSettings _llm = new();
     private string _provider = "ollama";
     private bool _saving;
+    private bool _showApiKey;
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,6 +138,11 @@
         _provider = value;
         _llm.Provider = value;
         StateHasChanged();
+    }
+
+    private void ToggleApiKeyVisibility()
+    {
+        _showApiKey = !_showApiKey;
     }
 
     private async Task SaveAsync()

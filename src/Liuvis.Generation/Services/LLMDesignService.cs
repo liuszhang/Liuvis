@@ -36,10 +36,12 @@ public class LLMDesignService
                 _logger.LogInformation("LLM generated scene with {Count} objects", scene.Objects.Count);
                 return scene;
             }
+            _logger.LogWarning("LLM returned empty scene. Raw response: {Raw}", response[..Math.Min(response.Length, 200)]);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to parse LLM scene output, falling back to template");
+            _logger.LogWarning(ex, "Failed to parse LLM scene output. Raw response: {Raw}, Extracted JSON: {Json}",
+                response[..Math.Min(response.Length, 300)], json[..Math.Min(json.Length, 300)]);
         }
 
         // Fallback: create a single default object
@@ -92,9 +94,20 @@ User description: " + description;
     private static string ExtractJson(string raw)
     {
         raw = raw.Trim();
+
+        // 1) Strip markdown code fences
         if (raw.StartsWith("```json")) raw = raw[7..];
-        if (raw.StartsWith("```")) raw = raw[3..];
+        else if (raw.StartsWith("```")) raw = raw[3..];
         if (raw.EndsWith("```")) raw = raw[..^3];
+
+        // 2) Extract the outermost JSON object from mixed text
+        var start = raw.IndexOf('{');
+        var end = raw.LastIndexOf('}');
+        if (start >= 0 && end > start)
+        {
+            return raw[start..(end + 1)].Trim();
+        }
+
         return raw.Trim();
     }
 }
