@@ -1,0 +1,161 @@
+@page "/settings"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ISettingsService SettingsService
+
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudText Typo="Typo.h4" Class="pa-4">Settings</MudText>
+
+<MudTabs Elevation="0" Class="px-4">
+    <MudTabPanel Text="LLM Configuration">
+        <MudCard Elevation="0" Class="mt-4">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Class="mb-4">AI Language Model Settings</MudText>
+
+                <MudStack Spacing="4">
+                        @* --- Provider Selection --- *@
+                        <div>
+                            <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Connection Mode</MudText>
+                            <MudToggleGroup Value="_provider" ValueChanged="OnProviderChanged" T="string"
+                                SelectionMode="SelectionMode.SingleSelection">
+                                <MudToggleItem T="string" Value="@("ollama")">
+                                    <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                        <MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Small" />
+                                        <MudText>Local Ollama</MudText>
+                                    </MudStack>
+                                </MudToggleItem>
+                                <MudToggleItem T="string" Value="@("openai")">
+                                    <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                        <MudIcon Icon="@Icons.Material.Filled.Cloud" Size="Size.Small" />
+                                        <MudText>Custom API Key</MudText>
+                                    </MudStack>
+                                </MudToggleItem>
+                            </MudToggleGroup>
+                        </div>
+
+                        <MudDivider />
+
+                        @* --- Provider-specific Settings --- *@
+                        <div style="display:@(_provider == "ollama" ? "block" : "none")">
+                            <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Ollama Server</MudText>
+                            <MudGrid Spacing="3">
+                                <MudItem xs="12" md="8">
+                                    <MudTextField @bind-Value="_llm.OllamaUrl" Label="URL"
+                                        HelperText="e.g. http://localhost:11434" Variant="Variant.Outlined"
+                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
+                                </MudItem>
+                                <MudItem xs="12" md="4">
+                                    <MudTextField @bind-Value="_llm.OllamaModel" Label="Model"
+                                        HelperText="e.g. qwen3:4b, llama3" Variant="Variant.Outlined"
+                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Memory" />
+                                </MudItem>
+                            </MudGrid>
+                        </div>
+
+                        <div style="display:@(_provider == "openai" ? "block" : "none")">
+                            <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">OpenAI / Compatible API</MudText>
+                            <MudGrid Spacing="3">
+                                <MudItem xs="12" md="6">
+                                    <MudTextField @bind-Value="_llm.OpenAIApiKey" Label="API Key"
+                                        HelperText="sk-... or custom API key" Variant="Variant.Outlined"
+                                        InputType="@(_showApiKey ? InputType.Text : InputType.Password)"                                        
+                                        Adornment="@(Adornment.End)"
+                                        AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                              OnAdornmentClick="ToggleApiKeyVisibility" />
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudTextField @bind-Value="_llm.OpenAIBaseUrl" Label="Base URL"
+                                        HelperText="e.g. https://api.openai.com/v1" Variant="Variant.Outlined"
+                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
+                                </MudItem>
+                                <MudItem xs="12" md="3">
+                                    <MudTextField @bind-Value="_llm.OpenAIModel" Label="Model"
+                                        HelperText="e.g. gpt-4o" Variant="Variant.Outlined"
+                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Memory" />
+                                </MudItem>
+                            </MudGrid>
+                        </div>
+
+                        <MudDivider />
+
+                        @* --- Common Settings --- *@
+                        <div>
+                            <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Generation Parameters</MudText>
+                            <MudGrid Spacing="3">
+                                <MudItem xs="6" md="3">
+                                    <MudNumericField @bind-Value="_llm.MaxTokens" Label="Max Tokens"
+                                        Variant="Variant.Outlined" Min="100" Max="32000" Step="100" />
+                                </MudItem>
+                                <MudItem xs="6" md="3">
+                                    <MudNumericField @bind-Value="_llm.TemperatureValue" Label="Temperature"
+                                        Variant="Variant.Outlined" Min="0.0" Max="2.0" Step="0.1" Format="F1" />
+                                </MudItem>
+                            </MudGrid>
+                        </div>
+                    </MudStack>
+            </MudCardContent>
+
+            <MudCardActions Class="pa-4">
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                    OnClick="SaveAsync" Disabled="_saving"
+                    StartIcon="@Icons.Material.Filled.Save">
+                    @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                    Save Configuration
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudTabPanel>
+
+    <MudTabPanel Text="General">
+        <MudCard Elevation="0" Class="mt-4">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Class="mb-2">Application Info</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Liuvis Studio v1.0 — AI-driven 3D Design Platform</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">.NET 10 + Blazor Server + MudBlazor</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private LlmSettings _llm = new();
+    private string _provider = "ollama";
+    private bool _saving;
+    private bool _showApiKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!RendererInfo.IsInteractive) return;
+        _llm = await SettingsService.GetLlmSettingsAsync();
+        _provider = _llm.Provider;
+    }
+
+    private void OnProviderChanged(string value)
+    {
+        _provider = value;
+        _llm.Provider = value;
+        StateHasChanged();
+    }
+
+    private void ToggleApiKeyVisibility()
+    {
+        _showApiKey = !_showApiKey;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            _llm.Temperature = Math.Round(_llm.TemperatureValue, 1);
+            await SettingsService.SaveLlmSettingsAsync(_llm);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

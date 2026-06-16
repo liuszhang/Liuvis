@@ -1,0 +1,185 @@
+@page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ISessionManager SessionManager
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@using Liuvis.Web.Components.Viewer
+
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudText Typo="Typo.h4" Class="pa-4">Liuvis Design Studio</MudText>
+
+<div style="display:flex; height:calc(100vh - 120px); background:#0a0e1a; color:#e2e8f0">
+    @* --- Left Chat Panel --- *@
+    <div style="width:400px; padding:24px; border-right:1px solid rgba(0,212,255,0.2); display:flex; flex-direction:column">
+        <h3 style="color:#00d4ff; margin:0 0 16px 0">Design Assistant</h3>
+        <input @bind="_chatInput" @bind:event="oninput"
+            @onkeyup="HandleKeyUp"
+            style="width:100%; padding:12px; background:#111827; border:1px solid rgba(0,212,255,0.3); color:#e2e8f0; border-radius:4px; font-size:14px"
+            placeholder="Describe your 3D idea, e.g. Create a blue cube" />
+        <button @onclick="SendChat" disabled="@_sending"
+            style="margin-top:12px; padding:10px 24px; background:#00d4ff; color:#0a0e1a; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:14px">
+            @if (_sending) { <span>@_progress</span> } else { <span>Send</span> }
+        </button>
+        <div style="margin-top:16px; flex:1; overflow-y:auto; font-size:13px">
+            @if (!string.IsNullOrEmpty(_thinking))
+            {
+                <details open style="margin-bottom:12px">
+                    <summary style="color:#7c3aed; cursor:pointer; font-weight:bold; margin-bottom:8px">Thinking Process</summary>
+                    <pre style="color:#94a3b8; white-space:pre-wrap; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; margin:0">@_thinking</pre>
+                </details>
+            }
+            @if (!string.IsNullOrEmpty(_response))
+            {
+                <div style="color:#00ff88; white-space:pre-wrap">@_response</div>
+            }
+        </div>
+    </div>
+
+    @* --- Right Preview Panel --- *@
+    <div style="flex:1; position:relative">
+        <ModelViewer ModelUrl="@(_modelUrl ?? "")" SceneData="@_sceneData" />
+    </div>
+</div>
+
+@code {
+    private Guid _sessionId;
+    private string _chatInput = "Create a blue cube";
+    private string _response = "";
+    private string _thinking = "";
+    private string _progress = "Thinking...";
+    private string? _modelUrl;
+    private string? _sceneData;
+    private bool _sending;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var session = await SessionManager.CreateSession("user-default");
+            _sessionId = session.SessionId;
+        }
+        catch { _sessionId = Guid.NewGuid(); }
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SendChat();
+    }
+
+    private async Task SendChat()
+    {
+        if (string.IsNullOrWhiteSpace(_chatInput)) return;
+
+        var message = _chatInput;
+        _chatInput = "";
+        _sending = true;
+        _thinking = "";
+        _response = "";
+        _sceneData = null;
+        _progress = "Thinking...";
+        StateHasChanged();
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            var baseUri = NavigationManager.BaseUri.TrimEnd('/');
+            using var http = new HttpClient { BaseAddress = new Uri(baseUri), Timeout = TimeSpan.FromMinutes(5) };
+            var payload = new StringContent(
+                System.Text.Json.JsonSerializer.Serialize(new { SessionId = _sessionId, Message = message }),
+                System.Text.Encoding.UTF8, "application/json");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/chat/stream") { Content = payload };
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _cts.Token);
+
+            using var stream = await response.Content.ReadAsStreamAsync(_cts.Token);
+            using var reader = new StreamReader(stream);
+
+            while (true)
+            {
+                var line = await reader.ReadLineAsync();
+                if (line == null) break;
+
+                if (line.StartsWith("event: "))
+                {
+                    var eventType = line[7..];
+                    var dataLine = await reader.ReadLineAsync(); // "data: ..."
+                    if (dataLine == null) break;
+                    var data = dataLine.StartsWith("data: ") ? dataLine[6..] : "";
+
+                    switch (eventType)
+                    {
+                        case "thinking":
+                            _thinking += data;
+                            _progress = "Thinking...";
+                            StateHasChanged();
+                            break;
+                        case "progress":
+                            _progress = data;
+                            StateHasChanged();
+                            break;
+                        case "complete":
+                            _sending = false;
+                            _progress = "Done";
+                            try
+                            {
+                                var result = System.Text.Json.JsonSerializer.Deserialize<StreamResult>(data);
+                                _response = result?.AssistantMessage ?? "";
+                                _thinking = result?.Thinking ?? _thinking;
+                                if (result?.Type == "model_ready" && result.ModelId != null)
+                                {
+                                    _modelUrl = $"/api/model/{result.ModelId}/download";
+
+                                    // Extract scene JSON for direct Three.js construction
+                                    if (result.Metadata != null && result.Metadata.TryGetValue("_scene", out var sceneVal))
+                                    {
+                                        _sceneData = sceneVal switch
+                                        {
+                                            string s => s,
+                                            System.Text.Json.JsonElement je => je.GetString(),
+                                            _ => null
+                                        };
+                                    }
+                                }
+                            }
+                            catch { _response = "Done"; }
+                            StateHasChanged();
+                            break;
+                        case "error":
+                            _response = $"Error: {data}";
+                            StateHasChanged();
+                            break;
+                    }
+
+                    // Skip empty line after data
+                    await reader.ReadLineAsync();
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _response = $"Error: {ex.Message}"; }
+        finally
+        {
+            // Only re-render if complete/error didn't already do it (prevents
+            // redundant render that can interfere with ModelViewer's Three.js canvas)
+            if (_sending)
+            {
+                _sending = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    public record StreamResult(
+        string AssistantMessage,
+        string Type,
+        string? Thinking = null,
+        Guid? ModelId = null,
+        string? ModelName = null,
+        Dictionary<string, object>? Metadata = null);
+}

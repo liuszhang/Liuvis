@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Liuvis.Core/Liuvis.Core.csproj" />
+    <Project Path="src/Liuvis.Design/Liuvis.Design.csproj" />
+    <Project Path="src/Liuvis.Generation/Liuvis.Generation.csproj" />
+    <Project Path="src/Liuvis.Infrastructure/Liuvis.Infrastructure.csproj" />
+    <Project Path="src/Liuvis.KnowledgeBase/Liuvis.KnowledgeBase.csproj" />
+    <Project Path="src/Liuvis.Modification/Liuvis.Modification.csproj" />
+    <Project Path="src/Liuvis.NLU/Liuvis.NLU.csproj" />
+    <Project Path="src/Liuvis.Session/Liuvis.Session.csproj" />
+    <Project Path="src/Liuvis.Web/Liuvis.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Liuvis.IntegrationTests/Liuvis.IntegrationTests.csproj" />
+    <Project Path="tests/Liuvis.UnitTests/Liuvis.UnitTests.csproj" />
+  </Folder>
+</Solution>

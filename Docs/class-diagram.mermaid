@@ -1,0 +1,319 @@
+classDiagram
+    direction TB
+
+    class Session {
+        +SessionId : Guid
+        +UserId : string
+        +CreatedAt : DateTime
+        +UpdatedAt : DateTime
+        +Status : SessionStatus
+        +CurrentModelId : Guid?
+        +Messages : List~SessionMessage~
+        +CreateMessage(role, content) SessionMessage
+        +GetContext() SessionContext
+        +UpdateModelRef(modelId) void
+    }
+
+    class SessionMessage {
+        +MessageId : Guid
+        +SessionId : Guid
+        +Role : MessageRole
+        +Content : string
+        +Timestamp : DateTime
+        +Metadata : Dictionary~string, object~
+    }
+
+    class Model3D {
+        +ModelId : Guid
+        +Name : string
+        +Description : string
+        +Format : ModelFormat
+        +FilePath : string
+        +ThumbnailPath : string
+        +Components : List~ModelComponent~
+        +Metadata : ModelMetadata
+        +CreatedAt : DateTime
+        +Version : int
+        +Tags : List~string~
+    }
+
+    class ModelComponent {
+        +ComponentId : Guid
+        +ModelId : Guid
+        +Name : string
+        +ParentId : Guid?
+        +GeometryType : string
+        +Transform : Transform3D
+        +Material : MaterialSpec
+        +Children : List~ModelComponent~
+    }
+
+    class KnowledgeEntry {
+        +EntryId : Guid
+        +ModelId : Guid
+        +Embedding : float[]
+        +Tags : List~string~
+        +Category : string
+        +Description : string
+        +CreatedAt : DateTime
+    }
+
+    class DesignSnapshot {
+        +SnapshotId : Guid
+        +SessionId : Guid
+        +ModelId : Guid
+        +Spec : DesignSpec
+        +CreatedAt : DateTime
+        +Description : string
+    }
+
+    class IntentResult {
+        +IntentType : IntentType
+        +Confidence : double
+        +Entities : List~EntityExtraction~
+        +OriginalText : string
+        +ParsedParameters : Dictionary~string, object~
+    }
+
+    class EntityExtraction {
+        +Type : string
+        +Value : string
+        +Start : int
+        +End : int
+    }
+
+    class DesignSpec {
+        +SpecId : Guid
+        +SessionId : Guid
+        +Intent : IntentResult
+        +Strategy : DesignStrategy
+        +Components : List~ComponentSpec~
+        +Constraints : List~string~
+        +CreatedAt : DateTime
+    }
+
+    class ComponentSpec {
+        +Name : string
+        +Description : string
+        +GeometryType : string
+        +Parameters : Dictionary~string, object~
+        +Material : MaterialSpec
+        +Children : List~ComponentSpec~
+    }
+
+    class DesignPlan {
+        +PlanId : Guid
+        +Strategy : DesignStrategy
+        +ReuseMatches : List~ModelMatch~
+        +NewComponents : List~ComponentSpec~
+        +Description : string
+    }
+
+    class ModelMatch {
+        +ModelId : Guid
+        +Name : string
+        +Similarity : double
+        +MatchedComponents : List~string~
+    }
+
+    class MaterialSpec {
+        +Color : string
+        +Type : MaterialType
+        +Roughness : double
+        +Metalness : double
+        +Opacity : double
+    }
+
+    class Transform3D {
+        +Position : Vector3
+        +Rotation : Vector3
+        +Scale : Vector3
+    }
+
+    class Vector3 {
+        +X : double
+        +Y : double
+        +Z : double
+    }
+
+    class ModificationRequest {
+        +ModelId : Guid
+        +SessionId : Guid
+        +ChangeType : ChangeType
+        +TargetComponent : string
+        +Parameters : Dictionary~string, object~
+    }
+
+    class SessionContext {
+        +SessionId : Guid
+        +CurrentModel : Model3D?
+        +RecentMessages : List~SessionMessage~
+        +CurrentSpec : DesignSpec?
+    }
+
+    Session "1" --> "*" SessionMessage : contains
+    Session "1" --> "0..1" Model3D : references
+    Model3D "1" --> "*" ModelComponent : contains
+    ModelComponent "0..1" --> "*" ModelComponent : children
+    ModelComponent *-- Transform3D : has
+    ModelComponent *-- MaterialSpec : has
+    Transform3D *-- Vector3 : position
+    Transform3D *-- Vector3 : rotation
+    Transform3D *-- Vector3 : scale
+    DesignSpec "1" --> "*" ComponentSpec : contains
+    DesignSpec *-- IntentResult : derived from
+    ComponentSpec *-- MaterialSpec : has
+    DesignPlan "1" --> "*" ModelMatch : reuses
+    DesignPlan "1" --> "*" ComponentSpec : creates
+    IntentResult "1" --> "*" EntityExtraction : contains
+    KnowledgeEntry "1" --> "1" Model3D : indexes
+    DesignSnapshot *-- DesignSpec : captures
+    ModificationRequest --> Model3D : targets
+
+    %% ---- Blazor UI 组件 ----
+    class ChatPanel {
+        <<Blazor Component>>
+        +Messages : List~ChatMessageVm~
+        +IsLoading : bool
+        +SessionId : Guid
+        +SendMessage(text) Task
+        +OnActionTriggered(action) EventCallback
+    }
+
+    class ModelViewer {
+        <<Blazor Component>>
+        +ModelUrl : string?
+        +Components : List~ComponentVm~
+        +HighlightComponentId : Guid?
+        +BloomEnabled : bool
+        +InitScene() Task
+        +LoadModel(url) Task
+        +UpdateComponentColor(id, color) Task
+        +HighlightComponent(id) Task
+    }
+
+    class StructureTree {
+        <<Blazor Component>>
+        +RootComponent : ComponentVm?
+        +SelectedId : Guid?
+        +OnNodeSelected : EventCallback~Guid~
+    }
+
+    class PropertyPanel {
+        <<Blazor Component>>
+        +SelectedComponent : ComponentVm?
+        +OnPropertyChanged : EventCallback
+    }
+
+    class DesignStudioPage {
+        <<Blazor Page>>
+        +SessionId : Guid
+        +CurrentModel : Model3D?
+        +ChatPanel : ChatPanel
+        +ModelViewer : ModelViewer
+        +StructureTree : StructureTree
+        +PropertyPanel : PropertyPanel
+    }
+
+    class ThreeJsInterop {
+        <<JSInterop Service>>
+        +InitScene(containerRef) Task
+        +LoadModel(url) Task
+        +UpdateComponentColor(id, color) Task
+        +HighlightComponent(id) Task
+        +SetBloomEnabled(enabled) Task
+        +DisposeAsync() Task
+    }
+
+    DesignStudioPage *-- ChatPanel : contains
+    DesignStudioPage *-- ModelViewer : contains
+    DesignStudioPage *-- StructureTree : contains
+    DesignStudioPage *-- PropertyPanel : contains
+    ModelViewer --> ThreeJsInterop : uses
+    ChatPanel --> ISessionManager : calls
+    ModelViewer --> IModelGenerator : calls
+
+    %% Interfaces
+    class INluService {
+        <<interface>>
+        +ParseIntent(text, context) Task~IntentResult~
+    }
+
+    class ISessionManager {
+        <<interface>>
+        +CreateSession(userId) Task~Session~
+        +GetSession(sessionId) Task~Session~
+        +AddMessage(sessionId, role, content) Task~SessionMessage~
+        +GetContext(sessionId) Task~SessionContext~
+        +UpdateModelRef(sessionId, modelId) Task
+    }
+
+    class IDesignEngine {
+        <<interface>>
+        +CreateDesignPlan(intent, matches) Task~DesignPlan~
+        +GenerateDesignSpec(plan) Task~DesignSpec~
+    }
+
+    class IModelGenerator {
+        <<interface>>
+        +GenerateModel(spec) Task~Model3D~
+        +GetModel(modelId) Task~Model3D~
+    }
+
+    class IModificationEngine {
+        <<interface>>
+        +ApplyModification(model, request) Task~Model3D~
+    }
+
+    class IKnowledgeBaseService {
+        <<interface>>
+        +SearchModels(query, topK) Task~List~ModelMatch~~
+        +SaveModel(model) Task~Guid~
+        +GetModel(modelId) Task~Model3D~
+        +AddTags(modelId, tags) Task
+    }
+
+    class IVectorSearchService {
+        <<interface>>
+        +Search(embedding, topK) Task~List~VectorSearchResult~~
+        +Upsert(id, embedding, metadata) Task
+    }
+
+    class ILlmClient {
+        <<interface>>
+        +CompleteAsync(prompt, options) Task~string~
+        +CompleteStreamingAsync(prompt, options) IAsyncEnumerable~string~
+        +GetEmbeddingAsync(text) Task~float[]~
+    }
+
+    class IObjectStorageService {
+        <<interface>>
+        +UploadAsync(key, stream, contentType) Task~string~
+        +DownloadAsync(key) Task~Stream~
+        +GetUrlAsync(key) Task~string~
+        +DeleteAsync(key) Task
+    }
+
+    class LocalStorageService {
+        +BasePath : string
+        +UploadAsync(key, stream, contentType) Task~string~
+        +DownloadAsync(key) Task~Stream~
+        +GetUrlAsync(key) Task~string~
+        +DeleteAsync(key) Task
+    }
+
+    class LocalStorageOptions {
+        +BasePath : string
+        +Provider : string
+    }
+
+    NluService ..|> INluService : implements
+    SessionManager ..|> ISessionManager : implements
+    DesignEngine ..|> IDesignEngine : implements
+    ModelGenerator ..|> IModelGenerator : implements
+    ModificationEngine ..|> IModificationEngine : implements
+    KnowledgeBaseService ..|> IKnowledgeBaseService : implements
+    PgvectorService ..|> IVectorSearchService : implements
+    OpenAIClient ..|> ILlmClient : implements
+    LocalStorageService ..|> IObjectStorageService : implements
+    MinioStorageService ..|> IObjectStorageService : implements

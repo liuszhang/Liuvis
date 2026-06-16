@@ -1,0 +1,13 @@
+@page "/test"
+
+<MudText Typo="Typo.h4">MudBlazor Test Page</MudText>
+<MudAlert Severity="Severity.Success" Class="mt-4">MudBlazor is working correctly!</MudAlert>
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="IncrementCount">Click me: @_count</MudButton>
+<MudTextField @bind-Value="_text" Label="Test Input" Class="mt-4" />
+
+@code {
+    private int _count;
+    private string _text = string.Empty;
+
+    private void IncrementCount() => _count++;
+}

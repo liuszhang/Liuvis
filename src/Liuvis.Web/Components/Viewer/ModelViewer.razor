@@ -1,0 +1,94 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* ---- Layer 1: Three.js canvas container (never touched by Blazor diff) ---- *@
+<div id="@_jsContainerId" class="js-canvas-host" style="position:absolute;inset:0"></div>
+
+@* ---- Layer 2: Blazor-managed placeholder overlay (removed when model loads) ---- *@
+@if (string.IsNullOrEmpty(ModelUrl))
+{
+    <div class="viewer-placeholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;pointer-events:none;background:#0a0e1a">
+        <MudIcon Icon="@Icons.Material.Filled.ViewInAr" Size="Size.Large" Color="Color.Secondary" />
+        <MudText Typo="Typo.body1" Class="mud-text-secondary mt-4">3D Preview</MudText>
+        <MudText Typo="Typo.caption">Start a conversation to generate a model</MudText>
+    </div>
+}
+
+@code {
+    [Parameter] public string? ModelUrl { get; set; }
+    [Parameter] public string? SceneData { get; set; }
+    [Parameter] public bool BloomEnabled { get; set; } = true;
+
+    private IJSObjectReference? _module;
+    private bool _initialized;
+    private string _jsContainerId = $"viewer-js-{Guid.NewGuid():N}";
+    private string? _loadedUrl;
+    private bool _sceneBuilt;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!RendererInfo.IsInteractive)
+            return;
+
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/three-module.js");
+            await _module.InvokeVoidAsync("initScene", _jsContainerId);
+            await _module.InvokeVoidAsync("setBloomEnabled", BloomEnabled);
+            _initialized = true;
+        }
+
+        if (_initialized && !string.IsNullOrEmpty(ModelUrl) && _module != null
+            && ModelUrl.StartsWith("/") && !ModelUrl.StartsWith("_")
+            && ModelUrl != _loadedUrl)
+        {
+            _loadedUrl = ModelUrl;
+            await _module.InvokeVoidAsync("loadModel", ModelUrl);
+        }
+
+        if (_initialized && !string.IsNullOrEmpty(SceneData) && _module != null && !_sceneBuilt)
+        {
+            _sceneBuilt = true;
+            await _module.InvokeVoidAsync("buildFromSceneDescription", SceneData);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SceneData != _lastSceneData)
+        {
+            _sceneBuilt = false;
+            _lastSceneData = SceneData;
+        }
+    }
+
+    private string? _lastSceneData;
+
+    public async Task HighlightComponent(string componentId)
+    {
+        if (_module != null)
+            await _module.InvokeVoidAsync("highlightComponent", componentId);
+    }
+
+    public async Task UpdateComponentColor(string componentId, string colorHex)
+    {
+        if (_module != null)
+            await _module.InvokeVoidAsync("updateComponentColor", componentId, colorHex);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module != null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("dispose");
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Circuit disconnected — JS runtime is already gone, safe to ignore
+            }
+        }
+    }
+}

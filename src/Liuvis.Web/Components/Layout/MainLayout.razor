@@ -1,0 +1,60 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="_liuvisTheme" IsDarkMode="true" />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <MudText Typo="Typo.h6" Class="ml-2">Liuvis Studio</MudText>
+        <MudSpacer />
+        <StatusBar />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Responsive" ClipMode="DrawerClipMode.Always" Elevation="2">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent Class="pa-0">
+        <MudContainer MaxWidth="MaxWidth.False" Class="ma-0 pa-0" Style="height: calc(100vh - 64px);">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    private MudTheme _liuvisTheme = new()
+    {
+        PaletteDark = new PaletteDark()
+        {
+            Primary = "#00d4ff",
+            Secondary = "#7c3aed",
+            Tertiary = "#00ff88",
+            AppbarBackground = "#111827",
+            Background = "#0a0e1a",
+            Surface = "#111827",
+            DrawerBackground = "#111827",
+            DrawerText = "#e2e8f0",
+            TextPrimary = "#e2e8f0",
+            TextSecondary = "#94a3b8",
+            ActionDefault = "#00d4ff",
+            ActionDisabled = "#4a5568",
+            Divider = "rgba(0, 212, 255, 0.15)",
+            DividerLight = "rgba(0, 212, 255, 0.08)",
+            TableLines = "rgba(0, 212, 255, 0.15)",
+            TableStriped = "#1a2236",
+            TableHover = "#1e293b",
+            DrawerIcon = "#00d4ff",
+            Info = "#00d4ff",
+            Success = "#00ff88",
+            Warning = "#f59e0b",
+            Error = "#ef4444",
+        }
+    };
+
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}

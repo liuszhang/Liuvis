@@ -1,0 +1,154 @@
+/* ============================================================
+   Liuvis Holographic Design System Styles
+   Full hologram / sci-fi inspired theme for the 3D design studio
+   ============================================================ */
+
+/* Grid background */
+.design-studio {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    grid-template-rows: 1fr;
+    height: calc(100vh - 64px);
+    overflow: hidden;
+}
+
+.studio-left {
+    border-right: 1px solid var(--liuvis-border, rgba(0, 212, 255, 0.2));
+    display: flex;
+    flex-direction: column;
+    min-width: 320px;
+    max-width: 420px;
+}
+
+.studio-right {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    overflow: hidden;
+}
+
+.viewer-area {
+    position: relative;
+    overflow: hidden;
+}
+
+.sidebar-bottom {
+    border-top: 1px solid var(--liuvis-border, rgba(0, 212, 255, 0.2));
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Message bubble styles */
+.message-bubble {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    animation: fadeIn 0.3s ease;
+}
+
+.message-bubble.user {
+    flex-direction: row-reverse;
+}
+
+.message-bubble .message-content {
+    max-width: 80%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 12px;
+}
+
+.message-bubble.user .message-content {
+    background: rgba(0, 212, 255, 0.12);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.message-bubble.assistant .message-content {
+    background: rgba(124, 58, 237, 0.08);
+    border: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.message-bubble.error .message-content {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.message-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Loading overlay */
+.loading-overlay-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: white;
+}
+
+/* Structure tree */
+.structure-tree ::deep .mud-treeview-item {
+    border-left: 2px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.structure-tree ::deep .mud-treeview-item:hover {
+    border-left-color: var(--liuvis-accent, #00d4ff);
+    background: rgba(0, 212, 255, 0.04);
+}
+
+.structure-tree ::deep .mud-treeview-item.mud-selected {
+    border-left-color: var(--liuvis-accent, #00d4ff);
+    background: rgba(0, 212, 255, 0.08);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 5px rgba(0, 212, 255, 0.3); }
+    50% { box-shadow: 0 0 15px rgba(0, 212, 255, 0.6); }
+}
+
+/* Holographic scanline effect */
+.model-viewer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 212, 255, 0.015) 2px,
+        rgba(0, 212, 255, 0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Panel titles */
+.mud-expansion-panel .mud-expand-panel-header {
+    background: var(--liuvis-bg-secondary, #111827);
+    border-bottom: 1px solid var(--liuvis-border, rgba(0, 212, 255, 0.1));
+}
+
+/* Color picker override */
+::deep .mud-picker .mud-color-picker {
+    background: var(--liuvis-bg-secondary, #111827);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .design-studio {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr;
+    }
+    .studio-left {
+        max-width: 100%;
+    }
+}

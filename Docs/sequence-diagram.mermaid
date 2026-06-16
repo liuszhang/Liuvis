@@ -1,0 +1,112 @@
+%% 新建设计完整流程 (Blazor Server 版)
+sequenceDiagram
+    actor User
+    participant Page as DesignStudio.razor
+    participant Chat as ChatPanel.razor
+    participant Viewer as ModelViewer.razor
+    participant Api as ChatController
+    participant SM as SessionManager
+    participant NLU as NluService
+    participant LLM as ILlmClient
+    participant KB as KnowledgeBaseService
+    participant VS as PgvectorService
+    participant DE as DesignEngine
+    participant Gen as ModelGenerator
+    participant OS as LocalStorageService
+    participant JS as Three.js (JSInterop)
+
+    User->>Chat: 输入自然语言需求
+    Chat->>Api: POST /api/chat { sessionId, message }
+    Api->>SM: GetOrCreateSession(sessionId)
+    SM-->>Api: Session
+
+    Api->>NLU: ParseIntent(message, context)
+    NLU->>LLM: CompleteAsync(intentPrompt)
+    LLM-->>NLU: JSON result
+    NLU-->>Api: IntentResult { type: Create, entities: [...] }
+
+    alt Intent is "Create"
+        Api->>LLM: GetEmbeddingAsync(message)
+        LLM-->>Api: embedding[]
+
+        Api->>KB: SearchModels(embedding, topK=5)
+        KB->>VS: Search(embedding, 5)
+        VS-->>KB: VectorSearchResult[]
+        KB-->>Api: List<ModelMatch>
+
+        alt Has reusable components (similarity > 0.7)
+            Api->>DE: CreateDesignPlan(intent, matches)
+            DE->>LLM: CompleteAsync(reuseDesignPrompt)
+            LLM-->>DE: plan JSON
+            DE-->>Api: DesignPlan { strategy: Reuse }
+        else No reusable components
+            Api->>DE: CreateDesignPlan(intent, [])
+            DE->>LLM: CompleteAsync(newDesignPrompt)
+            LLM-->>DE: plan JSON
+            DE-->>Api: DesignPlan { strategy: New }
+        end
+
+        Api->>DE: GenerateDesignSpec(plan)
+        DE-->>Api: DesignSpec
+
+        Api->>Gen: GenerateModel(spec)
+        Gen->>Gen: SceneGraphBuilder.Build(spec)
+        Gen->>OS: UploadAsync(modelId.glb, stream)
+        OS-->>Gen: fileUrl
+        Gen-->>Api: Model3D
+
+        Api->>SM: UpdateModelRef(sessionId, modelId)
+        Api->>SM: AddMessage(sessionId, Assistant, result)
+    end
+
+    Api-->>Chat: ApiResponse { type: "model_ready", data: modelSummary }
+    Chat->>Chat: StateHasChanged() — 显示 AI 回复
+
+    Chat->>Page: 通知模型就绪 (EventCallback)
+    Page->>Viewer: 设置 ModelUrl
+    Viewer->>JS: IJSRuntime.InvokeAsync("loadModel", url)
+    JS-->>Viewer: 加载完成
+    Note over JS: Three.js 在浏览器端独立渲染<br/>OrbitControls 交互不经 SignalR
+
+---
+
+%% 迭代修改流程 (Blazor Server 版)
+sequenceDiagram
+    actor User
+    participant Chat as ChatPanel.razor
+    participant Viewer as ModelViewer.razor
+    participant Api as ChatController
+    participant SM as SessionManager
+    participant NLU as NluService
+    participant LLM as ILlmClient
+    participant ME as ModificationEngine
+    participant OS as LocalStorageService
+    participant JS as Three.js (JSInterop)
+
+    User->>Chat: "把颜色改为红色"
+    Chat->>Api: POST /api/chat { sessionId, message }
+    Api->>SM: GetSession(sessionId)
+    SM-->>Api: Session (with currentModelId)
+
+    Api->>NLU: ParseIntent(message, context)
+    NLU->>LLM: CompleteAsync(intentPrompt)
+    LLM-->>NLU: JSON result
+    NLU-->>Api: IntentResult { type: Modify, entities: [color=red] }
+
+    Api->>ME: ApplyModification(model, ModificationRequest)
+    ME->>ME: ResolveOperation(changeType)
+    ME->>ME: ColorModifyOperation.Execute(model, {color: "red"})
+    ME->>OS: UploadAsync(updatedModelId.glb, stream)
+    OS-->>ME: fileUrl
+    ME-->>Api: Model3D (updated)
+
+    Api->>SM: UpdateModelRef(sessionId, newModelId)
+    Api->>SM: AddMessage(sessionId, Assistant, modificationResult)
+
+    Api-->>Chat: ApiResponse { type: "model_updated", data: diff }
+    Chat->>Chat: StateHasChanged() — 显示修改结果
+
+    Chat->>Viewer: 触发组件颜色更新
+    Viewer->>JS: IJSRuntime.InvokeAsync("updateComponentColor", id, "red")
+    JS-->>Viewer: 更新完成
+    Note over JS: Three.js 浏览器端直接更新材质<br/>无需重新加载整个模型

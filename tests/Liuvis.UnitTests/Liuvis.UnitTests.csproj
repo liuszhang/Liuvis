@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Liuvis.UnitTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="Moq" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="bunit" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Liuvis.Core\Liuvis.Core.csproj" />
+    <ProjectReference Include="..\..\src\Liuvis.NLU\Liuvis.NLU.csproj" />
+    <ProjectReference Include="..\..\src\Liuvis.Design\Liuvis.Design.csproj" />
+    <ProjectReference Include="..\..\src\Liuvis.Generation\Liuvis.Generation.csproj" />
+    <ProjectReference Include="..\..\src\Liuvis.Modification\Liuvis.Modification.csproj" />
+    <ProjectReference Include="..\..\src\Liuvis.Infrastructure\Liuvis.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

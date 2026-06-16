@@ -1,0 +1,45 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstats
+*.userprefs
+*.cache
+*.lock.json
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
+
+## NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+**/[Pp]ackages/repositories.config
+
+## EF Core Migrations (keep migrations, ignore design-time artifacts)
+*.dbmdl
+
+## Data
+data/
+*.db
+*.sqlite
+
+## Environment
+.env
+.env.*
+!.env.example
+
+## Logs
+logs/
+*.log
+
+## Node (for Three.js vendor)
+node_modules/
+package-lock.json
+
+## OS
+.DS_Store
+Thumbs.db

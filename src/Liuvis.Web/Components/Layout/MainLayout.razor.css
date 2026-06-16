@@ -1,0 +1,23 @@
+.mud-appbar {
+    border-bottom: 1px solid rgba(0, 212, 255, 0.2) !important;
+    background: linear-gradient(180deg, #111827 0%, #0f172a 100%) !important;
+    backdrop-filter: blur(8px);
+}
+
+.mud-drawer {
+    border-right: 1px solid rgba(0, 212, 255, 0.15) !important;
+}
+
+::deep .mud-navmenu .mud-nav-item {
+    border-radius: 6px;
+    margin: 2px 8px;
+}
+
+::deep .mud-navmenu .mud-nav-item:hover {
+    background-color: rgba(0, 212, 255, 0.08);
+}
+
+::deep .mud-navmenu .mud-nav-item.mud-selected {
+    background-color: rgba(0, 212, 255, 0.12);
+    color: #00d4ff;
+}

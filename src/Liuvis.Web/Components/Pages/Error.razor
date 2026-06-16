@@ -1,0 +1,19 @@
+@page "/error"
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center justify-center" Style="height: 100vh;">
+    <MudText Typo="Typo.h1" Color="Color.Error" Class="mb-4">Error</MudText>
+    <MudText Typo="Typo.h5" Class="mb-4">An unexpected error occurred.</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-8">Please try refreshing the page or contact support.</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshPage">
+        Refresh
+    </MudButton>
+</MudContainer>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private void RefreshPage()
+    {
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}
