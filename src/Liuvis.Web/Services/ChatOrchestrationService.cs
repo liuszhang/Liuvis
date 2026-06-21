@@ -50,6 +50,8 @@ public class ChatOrchestrationService
         Guid sessionId,
         string message,
         Action<string>? onProgress = null,
+        Action<string>? onThinkingChunk = null,
+        Action<string>? onResponseChunk = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Pipeline: Session={SessionId}, Message={Message}",
@@ -84,7 +86,7 @@ public class ChatOrchestrationService
             }
         }
 
-        var intent = await _nluService.ParseIntent(message, modelContext, cancellationToken);
+        var intent = await _nluService.ParseIntent(message, modelContext, onThinkingChunk, cancellationToken);
         await NotifyProgress(sessionId, $"Intent: {FormatIntent(intent.IntentType)} (confidence: {intent.Confidence:P0})");
 
         if (!string.IsNullOrEmpty(intent.Thinking))
@@ -94,8 +96,8 @@ public class ChatOrchestrationService
         {
             IntentType.Create => await HandleCreateAsync(sessionId, message, intent, onProgress, cancellationToken),
             IntentType.Modify => await HandleModifyAsync(sessionId, intent, session, onProgress, cancellationToken),
-            IntentType.Query => await HandleQueryAsync(sessionId, message, onProgress, cancellationToken),
-            _ => await HandleUnknownAsync(sessionId, message, onProgress, cancellationToken)
+            IntentType.Query => await HandleQueryAsync(sessionId, message, onProgress, onResponseChunk, cancellationToken),
+            _ => await HandleUnknownAsync(sessionId, message, onProgress, onResponseChunk, cancellationToken)
         };
     }
 
@@ -251,7 +253,7 @@ public class ChatOrchestrationService
 
     private async Task<ChatResponse> HandleQueryAsync(
         Guid sessionId, string message,
-        Action<string>? onProgress, CancellationToken ct)
+        Action<string>? onProgress, Action<string>? onResponseChunk, CancellationToken ct)
     {
         await NotifyProgress(sessionId, "Thinking...");
         try
@@ -262,6 +264,7 @@ public class ChatOrchestrationService
                 "You are Liuvis AI, a 3D design assistant. Help the user design 3D models. " +
                 "You can create, modify, and query 3D models. Be concise and helpful.",
                 onThinking: t => thinkSb.Append(t),
+                onToken: onResponseChunk,
                 cancellationToken: ct);
 
             var assistantMsg = await _sessionManager.AddMessage(sessionId, MessageRole.Assistant, reply, ct);
@@ -295,7 +298,7 @@ public class ChatOrchestrationService
 
     private async Task<ChatResponse> HandleUnknownAsync(
         Guid sessionId, string message,
-        Action<string>? onProgress, CancellationToken ct)
+        Action<string>? onProgress, Action<string>? onResponseChunk, CancellationToken ct)
     {
         await NotifyProgress(sessionId, "I'm not sure what you mean...");
         try
@@ -306,6 +309,7 @@ public class ChatOrchestrationService
                 "You are Liuvis AI, a 3D design assistant. The user's intent was unclear. " +
                 "Ask them to clarify whether they want to create, modify, or query a 3D model.",
                 onThinking: t => thinkSb.Append(t),
+                onToken: onResponseChunk,
                 cancellationToken: ct);
 
             var assistantMsg = await _sessionManager.AddMessage(sessionId, MessageRole.Assistant, reply, ct);

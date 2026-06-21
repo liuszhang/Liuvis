@@ -28,7 +28,9 @@ public class NluService : INluService
         _logger = logger;
     }
 
-    public async Task<IntentResult> ParseIntent(string text, string? context = null, CancellationToken cancellationToken = default)
+    public async Task<IntentResult> ParseIntent(string text, string? context = null,
+        Action<string>? onThinking = null,
+        CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Parsing intent for text: {Text}", text[..Math.Min(text.Length, 100)]);
 
@@ -37,7 +39,8 @@ public class NluService : INluService
             var thinkSb = new System.Text.StringBuilder();
             var prompt = BuildIntentPrompt(text, context);
             var rawResponse = await _llmClient.CompleteWithThinkingAsync(prompt, null,
-                onThinking: t => thinkSb.Append(t), cancellationToken);
+                onThinking: t => { thinkSb.Append(t); onThinking?.Invoke(t); },
+                onToken: null, cancellationToken);
             var json = ExtractJson(rawResponse);
 
             var classification = JsonSerializer.Deserialize<IntentClassificationResult>(json, _jsonOpts);

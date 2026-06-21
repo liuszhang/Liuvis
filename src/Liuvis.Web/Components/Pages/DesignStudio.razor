@@ -54,6 +54,14 @@ else
                     <span style="color:#cbd5e1; margin-left:6px">@msg.Text</span>
                 </div>
             }
+            @if (!string.IsNullOrEmpty(State.StreamingResponse))
+            {
+                <div style="margin-bottom:8px; padding:8px; border-radius:6px; background:rgba(0,255,136,0.05)">
+                    <span style="font-weight:bold; color:#00ff88">AI:</span>
+                    <span style="color:#cbd5e1; margin-left:6px">@State.StreamingResponse</span>
+                    <span style="display:inline-block; width:8px; height:14px; background:#00ff88; margin-left:2px; animation:blink 1s step-end infinite"></span>
+                </div>
+            }
         </div>
     </div>
 
@@ -63,6 +71,13 @@ else
     </div>
 </div>
 }
+
+<style>
+@@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+</style>
 
 @code {
     private bool _isLoading = true;
@@ -127,7 +142,7 @@ else
         State.ChatInput = "";
         State.Sending = true;
         State.Thinking = "";
-        State.Response = "";
+        State.StreamingResponse = "";
         State.SceneData = null;
         State.Progress = "Thinking...";
         StateHasChanged();
@@ -147,11 +162,21 @@ else
                     State.Progress = status;
                     InvokeAsync(StateHasChanged);
                 },
+                onThinkingChunk: token =>
+                {
+                    State.Thinking += token;
+                    InvokeAsync(StateHasChanged);
+                },
+                onResponseChunk: token =>
+                {
+                    State.StreamingResponse += token;
+                    InvokeAsync(StateHasChanged);
+                },
                 cancellationToken: _cts.Token);
 
             State.Thinking = result.Thinking ?? "";
-            State.Response = result.AssistantMessage;
             State.ChatHistory.Add(new DesignStudioState.ChatEntry(result.AssistantMessage, false));
+            State.StreamingResponse = "";
 
             if (result.Type is "model_ready" or "model_updated" && result.ModelId.HasValue)
             {

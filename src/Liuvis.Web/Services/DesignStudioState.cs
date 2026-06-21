@@ -19,6 +19,8 @@ public class DesignStudioState
 
     public string Thinking { get; set; } = "";
 
+    public string StreamingResponse { get; set; } = "";
+
     public string Progress { get; set; } = "Thinking...";
 
     public string? ModelUrl { get; set; }
@@ -36,6 +38,7 @@ public class DesignStudioState
         ChatInput = "Create a blue cube";
         Response = "";
         Thinking = "";
+        StreamingResponse = "";
         Progress = "Thinking...";
         ModelUrl = null;
         SceneData = null;

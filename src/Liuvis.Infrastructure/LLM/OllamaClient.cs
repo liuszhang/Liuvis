@@ -25,7 +25,7 @@ public class OllamaClient : ILlmClient
     {
         var chatClient = new OllamaApiClient(_endpoint, _model);
         var chat = new Chat(chatClient);
-        return await SendInternal(chat, prompt, systemMessage, null, cancellationToken);
+        return await SendInternal(chat, prompt, systemMessage, onThinking: null, onToken: null, cancellationToken);
     }
 
     public async IAsyncEnumerable<string> CompleteStreamingAsync(
@@ -38,13 +38,14 @@ public class OllamaClient : ILlmClient
             yield return t;
     }
 
-    /// <summary>Complete with thinking callback — onThink receives reasoning tokens in real-time.</summary>
+    /// <summary>Complete with thinking and response token callbacks.</summary>
     public async Task<string> CompleteWithThinkingAsync(string prompt, string? systemMessage,
-        Action<string>? onThinking, CancellationToken cancellationToken = default)
+        Action<string>? onThinking, Action<string>? onToken = null,
+        CancellationToken cancellationToken = default)
     {
         var chatClient = new OllamaApiClient(_endpoint, _model);
         var chat = new Chat(chatClient);
-        return await SendInternal(chat, prompt, systemMessage, onThinking, cancellationToken);
+        return await SendInternal(chat, prompt, systemMessage, onThinking, onToken, cancellationToken);
     }
 
     public async Task<float[]> GetEmbeddingAsync(string text,
@@ -55,7 +56,7 @@ public class OllamaClient : ILlmClient
     }
 
     private async Task<string> SendInternal(Chat chat, string prompt, string? systemMessage,
-        Action<string>? onThinking, CancellationToken ct)
+        Action<string>? onThinking, Action<string>? onToken, CancellationToken ct)
     {
         var result = new StringBuilder();
         var thinkSb = new StringBuilder();
@@ -65,7 +66,11 @@ public class OllamaClient : ILlmClient
 
         var fullPrompt = BuildPrompt(prompt, systemMessage);
         await foreach (var token in chat.SendAsync(fullPrompt, cancellationToken: ct))
-            result.Append(token);
+        {
+            var tokenStr = token.ToString()!;
+            result.Append(tokenStr);
+            onToken?.Invoke(tokenStr);
+        }
 
         if (thinkSb.Length > 0)
             result.Insert(0, $"<|thinking|>{thinkSb}</|thinking|>\n\n");
