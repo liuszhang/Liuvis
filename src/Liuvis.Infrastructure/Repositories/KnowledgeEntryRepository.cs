@@ -17,17 +17,17 @@ public class KnowledgeEntryRepository
         _logger = logger;
     }
 
-    public async Task<KnowledgeEntry?> GetByIdAsync(Guid entryId, CancellationToken ct = default)
+    public virtual async Task<KnowledgeEntry?> GetByIdAsync(Guid entryId, CancellationToken ct = default)
         => await _db.KnowledgeEntries.FirstOrDefaultAsync(e => e.EntryId == entryId, ct);
 
-    public async Task<KnowledgeEntry> CreateAsync(KnowledgeEntry entry, CancellationToken ct = default)
+    public virtual async Task<KnowledgeEntry> CreateAsync(KnowledgeEntry entry, CancellationToken ct = default)
     {
         _db.KnowledgeEntries.Add(entry);
         await _db.SaveChangesAsync(ct);
         return entry;
     }
 
-    public async Task<List<VectorSearchResult>> SearchByEmbeddingAsync(float[] embedding, int topK = 5, CancellationToken ct = default)
+    public virtual async Task<List<VectorSearchResult>> SearchByEmbeddingAsync(float[] embedding, int topK = 5, CancellationToken ct = default)
     {
         _logger.LogDebug("In-memory vector search: topK={TopK}, dimensions={Dim}", topK, embedding.Length);
 
@@ -77,14 +77,19 @@ public class KnowledgeEntryRepository
         return dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB));
     }
 
-    public async Task UpsertAsync(KnowledgeEntry entry, CancellationToken ct = default)
+    public virtual async Task UpsertAsync(KnowledgeEntry entry, CancellationToken ct = default)
     {
         var existing = await _db.KnowledgeEntries
             .FirstOrDefaultAsync(e => e.ModelId == entry.ModelId, ct);
 
         if (existing != null)
         {
-            _db.Entry(existing).CurrentValues.SetValues(entry);
+            // Avoid SetValues — it tries to set EntryId (PK) which EF Core forbids.
+            // The new entry built by PgvectorService always has a fresh Guid EntryId.
+            _db.Entry(existing).Property(e => e.Embedding).CurrentValue = entry.Embedding;
+            _db.Entry(existing).Property(e => e.Category).CurrentValue = entry.Category;
+            _db.Entry(existing).Property(e => e.Description).CurrentValue = entry.Description;
+            _db.Entry(existing).Property(e => e.Tags).CurrentValue = entry.Tags;
         }
         else
         {
@@ -93,7 +98,7 @@ public class KnowledgeEntryRepository
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteByModelIdAsync(Guid modelId, CancellationToken ct = default)
+    public virtual async Task DeleteByModelIdAsync(Guid modelId, CancellationToken ct = default)
     {
         var entries = await _db.KnowledgeEntries
             .Where(e => e.ModelId == modelId)

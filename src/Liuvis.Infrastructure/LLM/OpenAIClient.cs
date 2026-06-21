@@ -146,13 +146,13 @@ public class OpenAIClient : ILlmClient
     }
 
     public async Task<string> CompleteWithThinkingAsync(string prompt, string? systemMessage,
-        Action<string>? onThinking, CancellationToken cancellationToken = default)
+        Action<string>? onThinking, Action<string>? onToken = null,
+        CancellationToken cancellationToken = default)
     {
         // Use raw SSE streaming for OpenAI-compatible APIs to capture reasoning_content.
-        // This matches the proven approach in DeepSeekService.StreamChatCompletionAsync.
-        if (onThinking != null)
+        if (onThinking != null || onToken != null)
         {
-            return await CompleteWithThinkingSseAsync(prompt, systemMessage, onThinking, cancellationToken);
+            return await CompleteWithThinkingSseAsync(prompt, systemMessage, onThinking, onToken, cancellationToken);
         }
         return await CompleteAsync(prompt, systemMessage, cancellationToken);
     }
@@ -162,7 +162,7 @@ public class OpenAIClient : ILlmClient
     /// that support reasoning_content in delta messages.
     /// </summary>
     private async Task<string> CompleteWithThinkingSseAsync(string prompt, string? systemMessage,
-        Action<string> onThinking, CancellationToken ct)
+        Action<string>? onThinking, Action<string>? onToken, CancellationToken ct)
     {
         var endpoint = $"{_baseUrl}/chat/completions";
         _logger.LogDebug("OpenAI SSE streaming: endpoint={Endpoint}, model={Model}", endpoint, _model);
@@ -234,7 +234,7 @@ public class OpenAIClient : ILlmClient
                                 if (!string.IsNullOrEmpty(token))
                                 {
                                     thinkSb.Append(token);
-                                    onThinking(token);
+                                    onThinking?.Invoke(token);
                                 }
                             }
 
@@ -244,7 +244,10 @@ public class OpenAIClient : ILlmClient
                             {
                                 var token = c.GetString();
                                 if (!string.IsNullOrEmpty(token))
+                                {
                                     result.Append(token);
+                                    onToken?.Invoke(token);
+                                }
                             }
                         }
                     }

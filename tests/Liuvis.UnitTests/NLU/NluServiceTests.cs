@@ -25,7 +25,7 @@ public class NluServiceTests
     {
         // Arrange
         var llmResponse = @"{ ""Intent"": ""Create"", ""Confidence"": 0.95, ""Entities"": [{ ""Type"": ""object_type"", ""Value"": ""cylinder"", ""Start"": 0, ""End"": 8 }], ""Parameters"": {} }";
-        _llmMock.Setup(x => x.CompleteAsync(It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+        _llmMock.Setup(x => x.CompleteWithThinkingAsync(It.IsAny<string>(), null, It.IsAny<Action<string>?>(), It.IsAny<Action<string>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(llmResponse);
 
         // Act
@@ -42,7 +42,7 @@ public class NluServiceTests
     public async Task ParseIntent_WithEmptyInput_ReturnsUnknown()
     {
         // Arrange
-        _llmMock.Setup(x => x.CompleteAsync(It.IsAny<string>(), null, It.IsAny<CancellationToken>()))
+        _llmMock.Setup(x => x.CompleteWithThinkingAsync(It.IsAny<string>(), null, It.IsAny<Action<string>?>(), It.IsAny<Action<string>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(@"{ ""Intent"": ""Unknown"", ""Confidence"": 0.0, ""Entities"": [], ""Parameters"": {} }");
 
         // Act

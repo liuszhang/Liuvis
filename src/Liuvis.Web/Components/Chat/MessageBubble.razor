@@ -5,11 +5,38 @@
         </MudAvatar>
     </div>
     <div class="message-content">
-        <MudText Typo="Typo.body2" Class="message-text">@Message.Content</MudText>
+        @if (!string.IsNullOrEmpty(Message.Thinking))
+        {
+            <MudExpansionPanels Class="thinking-panel mb-2">
+                <MudExpansionPanel Text="Thinking process">
+                    <MudText Typo="Typo.caption" Class="thinking-text">@Message.Thinking</MudText>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+
+        <MudText Typo="Typo.body2" Class="message-text">@((MarkupString)FormatContent(Message.Content))</MudText>
+
+        @if (Message.Type is "model_ready" or "model_updated" && Message.ModelId.HasValue)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.ViewInAr" Class="mt-2">
+                3D Model Ready
+            </MudChip>
+        }
+
         <MudText Typo="Typo.caption" Class="mud-text-secondary">@Message.Timestamp.ToString("HH:mm")</MudText>
     </div>
 </div>
 
 @code {
     [Parameter] public ChatPanel.ChatMessageVm Message { get; set; } = new();
+
+    private static string FormatContent(string content)
+    {
+        content = System.Net.WebUtility.HtmlEncode(content);
+        content = System.Text.RegularExpressions.Regex.Replace(
+            content, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        content = System.Text.RegularExpressions.Regex.Replace(
+            content, @"\n", "<br/>");
+        return content;
+    }
 }

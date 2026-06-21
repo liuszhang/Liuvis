@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Liuvis.Core\Liuvis.Core.csproj" />
+    <ProjectReference Include="..\Liuvis.Infrastructure\Liuvis.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

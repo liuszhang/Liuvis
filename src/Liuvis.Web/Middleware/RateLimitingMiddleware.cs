@@ -15,6 +15,18 @@ public class RateLimitingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Skip rate limiting for Blazor infrastructure, SignalR, and static assets
+        var path = context.Request.Path.Value ?? string.Empty;
+        if (path.StartsWith("/_blazor") ||
+            path.StartsWith("/_framework") ||
+            path.StartsWith("/_content") ||
+            path.StartsWith("/css") ||
+            path.StartsWith("/ws"))
+        {
+            await _next(context);
+            return;
+        }
+
         var key = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var allowed = await CheckRateLimitAsync(key);
 
@@ -49,7 +61,7 @@ public class RateLimitingMiddleware
                     entry.Count = 1;
                     return true;
                 }
-                if (entry.Count >= 100)
+                if (entry.Count >= 500)
                 {
                     return false;
                 }

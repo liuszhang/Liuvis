@@ -6,5 +6,7 @@ namespace Liuvis.Core.Interfaces;
 public interface INluService
 {
     /// <summary>Parse user input text into structured intent and entities.</summary>
-    Task<IntentResult> ParseIntent(string text, string? context = null, CancellationToken cancellationToken = default);
+    Task<IntentResult> ParseIntent(string text, string? context = null,
+        Action<string>? onThinking = null,
+        CancellationToken cancellationToken = default);
 }

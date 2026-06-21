@@ -1,6 +1,7 @@
 @page "/settings"
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 @inject ISettingsService SettingsService
+@inject ILogger<Settings> Logger
 
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -8,11 +9,21 @@
 
 <MudText Typo="Typo.h4" Class="pa-4">Settings</MudText>
 
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mx-4" />
+}
+
 <MudTabs Elevation="0" Class="px-4">
     <MudTabPanel Text="LLM Configuration">
         <MudCard Elevation="0" Class="mt-4">
             <MudCardContent>
-                <MudText Typo="Typo.h6" Class="mb-4">AI Language Model Settings</MudText>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
+                    <MudText Typo="Typo.h6">AI Language Model Settings</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        @GetActiveModelDisplay()
+                    </MudChip>
+                </div>
 
                 <MudStack Spacing="4">
                         @* --- Provider Selection --- *@
@@ -118,19 +129,164 @@
             </MudCardContent>
         </MudCard>
     </MudTabPanel>
+
+    <MudTabPanel Text="模型生成配置">
+        <MudCard Elevation="0" Class="mt-4">
+            <MudCardContent>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
+                    <MudText Typo="Typo.h6" Class="mb-0">Model Generation Settings</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        @GetActiveGenModeDisplay()
+                    </MudChip>
+                </div>
+
+                <MudStack Spacing="4">
+                    @* --- Generation Mode --- *@
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Generation Mode</MudText>
+                        <MudToggleGroup Value="_genMode" ValueChanged="OnGenModeChanged" T="string"
+                            SelectionMode="SelectionMode.SingleSelection">
+                            <MudToggleItem T="string" Value="@("llm")">
+                                <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" />
+                                    <MudText>LLM Direct</MudText>
+                                </MudStack>
+                            </MudToggleItem>
+                            <MudToggleItem T="string" Value="@("mcp")">
+                                <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.IntegrationInstructions" Size="Size.Small" />
+                                    <MudText>MCP Tool</MudText>
+                                </MudStack>
+                            </MudToggleItem>
+                            <MudToggleItem T="string" Value="@("fake")">
+                                <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.DataObject" Size="Size.Small" />
+                                    <MudText>Fake Sample</MudText>
+                                </MudStack>
+                            </MudToggleItem>
+                        </MudToggleGroup>
+                    </div>
+
+                    <MudDivider />
+
+                    @* --- MCP Tool Settings --- *@
+                    <div style="display:@(_genMode == "mcp" ? "block" : "none")">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">MCP Tool Configuration</MudText>
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" md="6">
+                                <MudTextField @bind-Value="_gen.McpServerUrl" Label="MCP Server URL"
+                                    HelperText="e.g. http://localhost:8080" Variant="Variant.Outlined"
+                                    Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudTextField @bind-Value="_gen.McpToolName" Label="Tool Name"
+                                    HelperText="e.g. generate_model" Variant="Variant.Outlined"
+                                    Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Build" />
+                            </MudItem>
+                            <MudItem xs="12" md="3">
+                                <MudTextField @bind-Value="_gen.McpApiKey" Label="API Key"
+                                    HelperText="Optional authentication" Variant="Variant.Outlined"
+                                    InputType="@(_showMcpKey ? InputType.Text : InputType.Password)"
+                                    Adornment="@(Adornment.End)"
+                                    AdornmentIcon="@(_showMcpKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                    OnAdornmentClick="ToggleMcpKeyVisibility" />
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    @* --- Fake Model Settings --- *@
+                    <div style="display:@(_genMode == "fake" ? "block" : "none")">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Fake Model Configuration</MudText>
+                        <MudGrid Spacing="3">
+                            <MudItem xs="6" md="4">
+                                <MudSelect @bind-Value="_gen.FakeModelType" Label="Primitive Type"
+                                    Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                                    <MudSelectItem Value="@("box")">Box</MudSelectItem>
+                                    <MudSelectItem Value="@("sphere")">Sphere</MudSelectItem>
+                                    <MudSelectItem Value="@("cylinder")">Cylinder</MudSelectItem>
+                                    <MudSelectItem Value="@("capsule")">Capsule</MudSelectItem>
+                                    <MudSelectItem Value="@("plane")">Plane</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="6" md="4">
+                                <MudNumericField @bind-Value="_gen.FakeModelCount" Label="Model Count"
+                                    Variant="Variant.Outlined" Min="1" Max="100" Step="1" />
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    @* --- LLM mode hint --- *@
+                    <div style="display:@(_genMode == "llm" ? "block" : "none")">
+                        <MudAlert Severity="Severity.Info" Class="mt-2">
+                            Uses the LLM Configuration from the <strong>LLM Configuration</strong> tab for model generation.
+                        </MudAlert>
+                    </div>
+                </MudStack>
+            </MudCardContent>
+
+            <MudCardActions Class="pa-4">
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                    OnClick="SaveGenAsync" Disabled="_savingGen"
+                    StartIcon="@Icons.Material.Filled.Save">
+                    @if (_savingGen) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                    Save Configuration
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudTabPanel>
 </MudTabs>
 
 @code {
     private LlmSettings _llm = new();
     private string _provider = "ollama";
+    private bool _isLoading = true;
     private bool _saving;
     private bool _showApiKey;
 
+    private GenerationSettings _gen = new();
+    private string _genMode = "llm";
+    private bool _savingGen;
+    private bool _showMcpKey;
+
     protected override async Task OnInitializedAsync()
     {
-        if (!RendererInfo.IsInteractive) return;
-        _llm = await SettingsService.GetLlmSettingsAsync();
-        _provider = _llm.Provider;
+        if (!RendererInfo.IsInteractive)
+        {
+            Logger.LogInformation("[Settings] Prerendering — rendering loading placeholder");
+            return;
+        }
+
+        Logger.LogInformation("[Settings] Interactive mode — loading settings");
+        await LoadSettingsAsync();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        Logger.LogInformation("[Settings] LoadSettingsAsync START");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _llm = await SettingsService.GetLlmSettingsAsync();
+            _provider = _llm.Provider;
+            Logger.LogInformation("[Settings] LLM settings loaded: Provider={Provider}", _provider);
+
+            _gen = await SettingsService.GetGenerationSettingsAsync();
+            _genMode = _gen.Mode;
+            Logger.LogInformation("[Settings] Generation settings loaded: Mode={Mode}", _genMode);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[Settings] LoadSettingsAsync FAILED (elapsed={ElapsedMs}ms), using defaults", sw.ElapsedMilliseconds);
+        }
+        finally
+        {
+            _isLoading = false;
+            sw.Stop();
+            Logger.LogInformation("[Settings] LoadSettingsAsync END (elapsed={ElapsedMs}ms, _isLoading=false)", sw.ElapsedMilliseconds);
+            await InvokeAsync(StateHasChanged);
+            Logger.LogInformation("[Settings] StateHasChanged invoked after init");
+        }
     }
 
     private void OnProviderChanged(string value)
@@ -145,6 +301,23 @@
         _showApiKey = !_showApiKey;
     }
 
+    private string GetActiveModelDisplay()
+    {
+        if (_provider == "ollama")
+        {
+            return $"Ollama: {_llm.OllamaModel ?? "unknown"}";
+        }
+        return $"API: {_llm.OpenAIModel ?? "unknown"} @ {_llm.OpenAIBaseUrl ?? "default"}";
+    }
+
+    private string GetActiveGenModeDisplay() => _genMode switch
+    {
+        "llm" => "LLM Direct",
+        "mcp" => "MCP Tool",
+        "fake" => "Fake Sample",
+        _ => "Unknown"
+    };
+
     private async Task SaveAsync()
     {
         _saving = true;
@@ -156,6 +329,31 @@
         finally
         {
             _saving = false;
+        }
+    }
+
+    private void OnGenModeChanged(string value)
+    {
+        _genMode = value;
+        _gen.Mode = value;
+        StateHasChanged();
+    }
+
+    private void ToggleMcpKeyVisibility()
+    {
+        _showMcpKey = !_showMcpKey;
+    }
+
+    private async Task SaveGenAsync()
+    {
+        _savingGen = true;
+        try
+        {
+            await SettingsService.SaveGenerationSettingsAsync(_gen);
+        }
+        finally
+        {
+            _savingGen = false;
         }
     }
 }

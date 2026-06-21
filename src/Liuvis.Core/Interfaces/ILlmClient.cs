@@ -9,9 +9,11 @@ public interface ILlmClient
     /// <summary>Complete a prompt with streaming response chunks.</summary>
     IAsyncEnumerable<string> CompleteStreamingAsync(string prompt, string? systemMessage = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Complete with real-time thinking callback (Ollama only).</summary>
+    /// <summary>Complete with real-time thinking and response token callbacks.</summary>
     Task<string> CompleteWithThinkingAsync(string prompt, string? systemMessage,
-        Action<string>? onThinking, CancellationToken cancellationToken = default);
+        Action<string>? onThinking,
+        Action<string>? onToken = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Generate an embedding vector for the given text.</summary>
     Task<float[]> GetEmbeddingAsync(string text, CancellationToken cancellationToken = default);

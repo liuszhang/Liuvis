@@ -3,6 +3,7 @@ using Liuvis.Core.Enums;
 using Liuvis.Core.Interfaces;
 using Liuvis.Core.ValueObjects;
 using Liuvis.Generation.Geometry;
+using Liuvis.Infrastructure.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace Liuvis.Generation.Services;
@@ -13,17 +14,20 @@ public class ModelGenerator : IModelGenerator
     private readonly IObjectStorageService _storage;
     private readonly LLMDesignService _llmDesign;
     private readonly ProceduralGeometryBuilder _geometryBuilder;
+    private readonly ModelRepository _modelRepository;
     private readonly ILogger<ModelGenerator> _logger;
 
     public ModelGenerator(
         IObjectStorageService storage,
         LLMDesignService llmDesign,
         ProceduralGeometryBuilder geometryBuilder,
+        ModelRepository modelRepository,
         ILogger<ModelGenerator> logger)
     {
         _storage = storage;
         _llmDesign = llmDesign;
         _geometryBuilder = geometryBuilder;
+        _modelRepository = modelRepository;
         _logger = logger;
     }
 
@@ -41,20 +45,16 @@ public class ModelGenerator : IModelGenerator
 
         try
         {
-            // Step 1: Use LLM to generate structured scene description
             var scene = await _llmDesign.GenerateSceneFromText(spec.Intent.OriginalText, cancellationToken);
 
             if (scene.Objects.Count > 0)
             {
-                // Step 2: Build real geometry from scene description
                 glbData = _geometryBuilder.BuildGlb(scene);
 
-                // Step 3: Store scene JSON for frontend direct Three.js construction
                 var sceneJson = System.Text.Json.JsonSerializer.Serialize(scene,
                     new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
                 model.Metadata["_scene"] = sceneJson;
 
-                // Step 4: Create model components matching scene objects
                 foreach (var obj in scene.Objects)
                 {
                     var comp = new ModelComponent(model.ModelId, obj.Type, obj.Type);
@@ -80,11 +80,12 @@ public class ModelGenerator : IModelGenerator
             glbData = GenerateSimpleGlb(model);
         }
 
-        // Store the generated GLB file
         var key = $"{model.ModelId}.glb";
         using var stream = new MemoryStream(glbData);
         var fileUrl = await _storage.UploadAsync(key, stream, "model/gltf-binary", cancellationToken);
         model.SetFilePath(key);
+
+        await _modelRepository.CreateAsync(model, cancellationToken);
 
         _logger.LogInformation("Model generated: {ModelId} ({ByteCount:n0} bytes) at {FilePath}",
             model.ModelId, glbData.Length, key);
@@ -93,44 +94,19 @@ public class ModelGenerator : IModelGenerator
 
     public async Task<Model3D?> GetModel(Guid modelId, CancellationToken cancellationToken = default)
     {
-        await Task.CompletedTask;
         _logger.LogDebug("GetModel: {ModelId}", modelId);
-        return null;
+        return await _modelRepository.GetByIdAsync(modelId, cancellationToken);
     }
 
     public async Task<Stream> GetModelFile(Guid modelId, CancellationToken cancellationToken = default)
     {
-        var key = $"{modelId}.glb";
-        try
-        {
-            return await _storage.DownloadAsync(key, cancellationToken);
-        }
-        catch (FileNotFoundException)
-        {
+        var model = await _modelRepository.GetByIdAsync(modelId, cancellationToken);
+        if (model == null)
             throw new Liuvis.Core.Exceptions.ModelNotFoundException(modelId);
-        }
+
+        return await _storage.DownloadAsync(model.FilePath, cancellationToken);
     }
 
-    private static ModelComponent CreateComponentFromTemplate(Guid modelId, ComponentSpec spec)
-    {
-        var component = new ModelComponent(modelId, spec.Name, spec.GeometryType);
-        component.SetMaterial(spec.Material);
-        component.SetTransform(new Transform3D
-        {
-            Position = Vector3.Zero,
-            Rotation = Vector3.Zero,
-            Scale = spec.GeometryType switch
-            {
-                "sphere" => new Vector3(1, 1, 1),
-                "cylinder" => new Vector3(0.5, 1, 0.5),
-                "box" => new Vector3(1, 1, 1),
-                _ => Vector3.One
-            }
-        });
-        return component;
-    }
-
-    /// <summary>Minimal GLB fallback — empty scene with no geometry.</summary>
     private static byte[] GenerateSimpleGlb(Model3D model)
     {
         using var ms = new MemoryStream();

@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject ILogger<MainLayout> Logger
 
 <MudThemeProvider Theme="_liuvisTheme" IsDarkMode="true" />
 
@@ -52,6 +53,18 @@
             Error = "#ef4444",
         }
     };
+
+    protected override void OnInitialized()
+    {
+        Logger.LogInformation("[MainLayout] OnInitialized");
+        base.OnInitialized();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        Logger.LogInformation("[MainLayout] OnAfterRender firstRender={FirstRender}", firstRender);
+        base.OnAfterRender(firstRender);
+    }
 
     private void DrawerToggle()
     {

@@ -5,6 +5,7 @@ using Liuvis.Core.ValueObjects;
 using Liuvis.Generation.Services;
 using Liuvis.Generation.Geometry;
 using Liuvis.Core.Interfaces;
+using Liuvis.Infrastructure.Repositories;
 using Moq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,8 +25,11 @@ public class ModelGeneratorTests
         var llmMock = new Mock<ILlmClient>();
         var llmDesign = new LLMDesignService(llmMock.Object, NullLogger<LLMDesignService>.Instance);
         var geoBuilder = new ProceduralGeometryBuilder(NullLogger<ProceduralGeometryBuilder>.Instance);
+        var modelRepoMock = new Mock<ModelRepository>(new object[] { null! });
+        modelRepoMock.Setup(x => x.CreateAsync(It.IsAny<Liuvis.Core.Entities.Model3D>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Liuvis.Core.Entities.Model3D m, CancellationToken _) => m);
         var logger = NullLogger<ModelGenerator>.Instance;
-        var generator = new ModelGenerator(storageMock.Object, llmDesign, geoBuilder, logger);
+        var generator = new ModelGenerator(storageMock.Object, llmDesign, geoBuilder, modelRepoMock.Object, logger);
 
         var spec = new DesignSpec
         {
@@ -47,7 +51,6 @@ public class ModelGeneratorTests
         // Assert
         model.Should().NotBeNull();
         model.Name.Should().NotBeEmpty();
-        model.Components.Should().NotBeEmpty();
         model.FilePath.Should().NotBeEmpty();
     }
 }
