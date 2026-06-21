@@ -23,7 +23,13 @@ else
 <div style="display:flex; height:calc(100vh - 120px); background:#0a0e1a; color:#e2e8f0">
     @* --- Left Chat Panel --- *@
     <div style="width:400px; padding:24px; border-right:1px solid rgba(0,212,255,0.2); display:flex; flex-direction:column">
-        <h3 style="color:#00d4ff; margin:0 0 16px 0">Design Assistant</h3>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px">
+            <h3 style="color:#00d4ff; margin:0">Design Assistant</h3>
+            <button @onclick="NewChat" disabled="@State.Sending"
+                style="padding:6px 16px; background:transparent; color:#94a3b8; border:1px solid rgba(148,163,184,0.3); border-radius:4px; cursor:pointer; font-weight:500; font-size:12px">
+                New
+            </button>
+        </div>
         <input @bind="State.ChatInput" @bind:event="oninput"
             @onkeyup="HandleKeyUp"
             style="width:100%; padding:12px; background:#111827; border:1px solid rgba(0,212,255,0.3); color:#e2e8f0; border-radius:4px; font-size:14px"
@@ -32,10 +38,7 @@ else
             style="margin-top:12px; padding:10px 24px; background:#00d4ff; color:#0a0e1a; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:14px">
             @if (State.Sending) { <span>@State.Progress</span> } else { <span>Send</span> }
         </button>
-        <button @onclick="NewChat" disabled="@State.Sending"
-            style="margin-top:8px; padding:8px 24px; background:transparent; color:#94a3b8; border:1px solid rgba(148,163,184,0.3); border-radius:4px; cursor:pointer; font-weight:500; font-size:13px">
-            New
-        </button>
+
         <div style="margin-top:16px; flex:1; overflow-y:auto; font-size:13px">
             @if (!string.IsNullOrEmpty(State.Thinking))
             {
@@ -50,10 +53,6 @@ else
                     <span style="font-weight:bold; color:@(msg.IsUser ? "#00d4ff" : "#00ff88")">@(msg.IsUser ? "You" : "AI"):</span>
                     <span style="color:#cbd5e1; margin-left:6px">@msg.Text</span>
                 </div>
-            }
-            @if (!string.IsNullOrEmpty(State.Response))
-            {
-                <div style="color:#00ff88; white-space:pre-wrap; padding:8px; border-radius:6px; background:rgba(0,255,136,0.05)">@State.Response</div>
             }
         </div>
     </div>

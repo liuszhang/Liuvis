@@ -84,7 +84,12 @@ public class KnowledgeEntryRepository
 
         if (existing != null)
         {
-            _db.Entry(existing).CurrentValues.SetValues(entry);
+            // Avoid SetValues — it tries to set EntryId (PK) which EF Core forbids.
+            // The new entry built by PgvectorService always has a fresh Guid EntryId.
+            _db.Entry(existing).Property(e => e.Embedding).CurrentValue = entry.Embedding;
+            _db.Entry(existing).Property(e => e.Category).CurrentValue = entry.Category;
+            _db.Entry(existing).Property(e => e.Description).CurrentValue = entry.Description;
+            _db.Entry(existing).Property(e => e.Tags).CurrentValue = entry.Tags;
         }
         else
         {

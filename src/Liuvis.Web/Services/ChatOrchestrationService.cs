@@ -179,9 +179,14 @@ public class ChatOrchestrationService
 
         await NotifyProgress(sessionId, "Applying modification...");
         var changeType = ResolveChangeType(intent.ParsedParameters);
-        var targetComponent = intent.Entities.FirstOrDefault()?.Value ?? "all";
-        if (targetComponent == "all" && intent.ParsedParameters.TryGetValue("targetComponent", out var tcVal))
-            targetComponent = tcVal?.ToString() ?? "all";
+        // Prefer Parameters over Entities: NLU may return color entities
+        // which would be incorrectly picked as targetComponent.
+        var targetComponent = "all";
+        if (intent.ParsedParameters.TryGetValue("targetComponent", out var tcVal)
+            && tcVal is string tcStr && !string.IsNullOrWhiteSpace(tcStr))
+        {
+            targetComponent = tcStr;
+        }
 
         var modRequest = new ModificationRequest
         {
@@ -198,7 +203,7 @@ public class ChatOrchestrationService
         UpdateSceneFromComponents(updatedModel);
 
         await NotifyProgress(sessionId, "Regenerating 3D model...");
-        await _modelGenerator.GenerateModel(
+        var newModel = await _modelGenerator.GenerateModel(
             new DesignSpec
             {
                 SessionId = sessionId,
@@ -212,9 +217,9 @@ public class ChatOrchestrationService
                 }).ToList()
             }, ct);
 
-        await _sessionManager.UpdateModelRef(sessionId, updatedModel.ModelId, ct);
+        await _sessionManager.UpdateModelRef(sessionId, newModel.ModelId, ct);
 
-        try { await _kbService.SaveModel(updatedModel, ct); }
+        try { await _kbService.SaveModel(newModel, ct); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to re-index modified model in KB"); }
 
         var description = FormatModificationDescription(changeType, targetComponent, intent.ParsedParameters);
@@ -223,8 +228,8 @@ public class ChatOrchestrationService
         await _hub.Clients.Group(sessionId.ToString())
             .SendAsync("ModelUpdated", new
             {
-                updatedModel.ModelId,
-                updatedModel.Name,
+                newModel.ModelId,
+                newModel.Name,
                 ChangeType = changeType.ToString(),
                 TargetComponent = targetComponent
             });
@@ -235,11 +240,11 @@ public class ChatOrchestrationService
             MessageId = assistantMsg.MessageId,
             AssistantMessage = description,
             IntentType = intent.IntentType,
-            ModelId = updatedModel.ModelId,
-            ModelName = updatedModel.Name,
+            ModelId = newModel.ModelId,
+            ModelName = newModel.Name,
             Type = "model_updated",
-            Metadata = updatedModel.Metadata.Count > 0
-                ? updatedModel.Metadata.ToDictionary(kv => kv.Key, kv => (object)kv.Value)
+            Metadata = newModel.Metadata.Count > 0
+                ? newModel.Metadata.ToDictionary(kv => kv.Key, kv => (object)kv.Value)
                 : null
         };
     }

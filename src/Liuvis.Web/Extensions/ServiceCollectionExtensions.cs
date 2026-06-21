@@ -67,8 +67,11 @@ public static class ServiceCollectionExtensions
             var rawBaseUrl = config["Liuvis:Llm:openAIBaseUrl"]
                            ?? config["Liuvis:Llm:OpenAIBaseUrl"]
                            ?? "(not found in config)";
+            var displayModel = settings.Provider == "openai"
+                ? (settings.OpenAIModel ?? "unknown")
+                : (settings.OllamaModel ?? settings.OpenAIModel ?? "unknown");
             logger.LogInformation("[DI.Build] LLM settings from config: Provider={Provider}, RawBaseUrl={RawBaseUrl}, BoundBaseUrl={BoundBaseUrl}, Model={Model}",
-                settings.Provider, rawBaseUrl, settings.OpenAIBaseUrl, settings.OllamaModel ?? settings.OpenAIModel ?? "unknown");
+                settings.Provider, rawBaseUrl, settings.OpenAIBaseUrl, displayModel);
 
             if (settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.OpenAIApiKey))
             {

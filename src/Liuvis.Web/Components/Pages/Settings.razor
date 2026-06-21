@@ -133,7 +133,12 @@
     <MudTabPanel Text="模型生成配置">
         <MudCard Elevation="0" Class="mt-4">
             <MudCardContent>
-                <MudText Typo="Typo.h6" Class="mb-4">Model Generation Settings</MudText>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
+                    <MudText Typo="Typo.h6" Class="mb-0">Model Generation Settings</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        @GetActiveGenModeDisplay()
+                    </MudChip>
+                </div>
 
                 <MudStack Spacing="4">
                     @* --- Generation Mode --- *@
@@ -304,6 +309,14 @@
         }
         return $"API: {_llm.OpenAIModel ?? "unknown"} @ {_llm.OpenAIBaseUrl ?? "default"}";
     }
+
+    private string GetActiveGenModeDisplay() => _genMode switch
+    {
+        "llm" => "LLM Direct",
+        "mcp" => "MCP Tool",
+        "fake" => "Fake Sample",
+        _ => "Unknown"
+    };
 
     private async Task SaveAsync()
     {
