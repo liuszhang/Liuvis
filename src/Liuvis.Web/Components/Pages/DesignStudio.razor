@@ -1,8 +1,10 @@
 @page "/"
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 @inject ISessionManager SessionManager
 @inject ChatOrchestrationService ChatService
 @inject IJSRuntime JS
+@inject ILogger<DesignStudio> Logger
+@inject DesignStudioState State
 @using Liuvis.Web.Components.Viewer
 
 <MudDialogProvider />
@@ -11,66 +13,106 @@
 
 <MudText Typo="Typo.h4" Class="pa-4">Liuvis Design Studio</MudText>
 
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mx-4" />
+    <MudText Typo="Typo.body2" Class="pa-4 mud-text-secondary">Initializing session...</MudText>
+}
+else
+{
 <div style="display:flex; height:calc(100vh - 120px); background:#0a0e1a; color:#e2e8f0">
     @* --- Left Chat Panel --- *@
     <div style="width:400px; padding:24px; border-right:1px solid rgba(0,212,255,0.2); display:flex; flex-direction:column">
         <h3 style="color:#00d4ff; margin:0 0 16px 0">Design Assistant</h3>
-        <input @bind="_chatInput" @bind:event="oninput"
+        <input @bind="State.ChatInput" @bind:event="oninput"
             @onkeyup="HandleKeyUp"
             style="width:100%; padding:12px; background:#111827; border:1px solid rgba(0,212,255,0.3); color:#e2e8f0; border-radius:4px; font-size:14px"
             placeholder="Describe your 3D idea, e.g. Create a blue cube" />
-        <button @onclick="SendChat" disabled="@_sending"
+        <button @onclick="SendChat" disabled="@State.Sending"
             style="margin-top:12px; padding:10px 24px; background:#00d4ff; color:#0a0e1a; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:14px">
-            @if (_sending) { <span>@_progress</span> } else { <span>Send</span> }
+            @if (State.Sending) { <span>@State.Progress</span> } else { <span>Send</span> }
+        </button>
+        <button @onclick="NewChat" disabled="@State.Sending"
+            style="margin-top:8px; padding:8px 24px; background:transparent; color:#94a3b8; border:1px solid rgba(148,163,184,0.3); border-radius:4px; cursor:pointer; font-weight:500; font-size:13px">
+            New
         </button>
         <div style="margin-top:16px; flex:1; overflow-y:auto; font-size:13px">
-            @if (!string.IsNullOrEmpty(_thinking))
+            @if (!string.IsNullOrEmpty(State.Thinking))
             {
                 <details open style="margin-bottom:12px">
                     <summary style="color:#7c3aed; cursor:pointer; font-weight:bold; margin-bottom:8px">Thinking Process</summary>
-                    <pre style="color:#94a3b8; white-space:pre-wrap; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; margin:0">@_thinking</pre>
+                    <pre style="color:#94a3b8; white-space:pre-wrap; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; margin:0">@State.Thinking</pre>
                 </details>
             }
-            @foreach (var msg in _chatHistory)
+            @foreach (var msg in State.ChatHistory)
             {
                 <div style="margin-bottom:8px; padding:8px; border-radius:6px; background:@(msg.IsUser ? "rgba(0,212,255,0.1)" : "rgba(0,255,136,0.05)")">
                     <span style="font-weight:bold; color:@(msg.IsUser ? "#00d4ff" : "#00ff88")">@(msg.IsUser ? "You" : "AI"):</span>
                     <span style="color:#cbd5e1; margin-left:6px">@msg.Text</span>
                 </div>
             }
-            @if (!string.IsNullOrEmpty(_response))
+            @if (!string.IsNullOrEmpty(State.Response))
             {
-                <div style="color:#00ff88; white-space:pre-wrap; padding:8px; border-radius:6px; background:rgba(0,255,136,0.05)">@_response</div>
+                <div style="color:#00ff88; white-space:pre-wrap; padding:8px; border-radius:6px; background:rgba(0,255,136,0.05)">@State.Response</div>
             }
         </div>
     </div>
 
     @* --- Right Preview Panel --- *@
     <div style="flex:1; position:relative">
-        <ModelViewer ModelUrl="@(_modelUrl ?? "")" SceneData="@_sceneData" />
+        <ModelViewer ModelUrl="@(State.ModelUrl ?? "")" SceneData="@State.SceneData" />
     </div>
 </div>
+}
 
 @code {
-    private Guid _sessionId;
-    private string _chatInput = "Create a blue cube";
-    private string _response = "";
-    private string _thinking = "";
-    private string _progress = "Thinking...";
-    private string? _modelUrl;
-    private string? _sceneData;
-    private bool _sending;
+    private bool _isLoading = true;
     private CancellationTokenSource? _cts;
-    private List<ChatEntry> _chatHistory = new();
 
     protected override async Task OnInitializedAsync()
     {
+        if (!RendererInfo.IsInteractive)
+        {
+            Logger.LogInformation("[DesignStudio] Prerendering — rendering loading placeholder");
+            return;
+        }
+
+        if (State.IsInitialized)
+        {
+            Logger.LogInformation("[DesignStudio] Restoring state from DesignStudioState (SessionId={SessionId})", State.SessionId);
+            _isLoading = false;
+            return;
+        }
+
+        Logger.LogInformation("[DesignStudio] Interactive mode — initializing session for the first time");
+        await InitializeSessionAsync();
+    }
+
+    private async Task InitializeSessionAsync()
+    {
+        Logger.LogInformation("[DesignStudio] InitializeSessionAsync START");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             var session = await SessionManager.CreateSession("user-default");
-            _sessionId = session.SessionId;
+            State.SessionId = session.SessionId;
+            State.IsInitialized = true;
+            Logger.LogInformation("[DesignStudio] Session created: {SessionId}", State.SessionId);
         }
-        catch { _sessionId = Guid.NewGuid(); }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[DesignStudio] CreateSession failed, using fallback GUID");
+            State.SessionId = Guid.NewGuid();
+            State.IsInitialized = true;
+        }
+        finally
+        {
+            _isLoading = false;
+            sw.Stop();
+            Logger.LogInformation("[DesignStudio] InitializeSessionAsync END (elapsed={ElapsedMs}ms, _isLoading=false)", sw.ElapsedMilliseconds);
+            await InvokeAsync(StateHasChanged);
+            Logger.LogInformation("[DesignStudio] StateHasChanged invoked after init");
+        }
     }
 
     private async Task HandleKeyUp(KeyboardEventArgs e)
@@ -80,15 +122,15 @@
 
     private async Task SendChat()
     {
-        if (string.IsNullOrWhiteSpace(_chatInput)) return;
+        if (string.IsNullOrWhiteSpace(State.ChatInput)) return;
 
-        var message = _chatInput;
-        _chatInput = "";
-        _sending = true;
-        _thinking = "";
-        _response = "";
-        _sceneData = null;
-        _progress = "Thinking...";
+        var message = State.ChatInput;
+        State.ChatInput = "";
+        State.Sending = true;
+        State.Thinking = "";
+        State.Response = "";
+        State.SceneData = null;
+        State.Progress = "Thinking...";
         StateHasChanged();
 
         _cts?.Cancel();
@@ -96,29 +138,29 @@
 
         try
         {
-            _chatHistory.Add(new ChatEntry(message, true));
+            State.ChatHistory.Add(new DesignStudioState.ChatEntry(message, true));
 
             var result = await ChatService.ProcessMessageAsync(
-                _sessionId,
+                State.SessionId,
                 message,
                 onProgress: status =>
                 {
-                    _progress = status;
+                    State.Progress = status;
                     InvokeAsync(StateHasChanged);
                 },
                 cancellationToken: _cts.Token);
 
-            _thinking = result.Thinking ?? "";
-            _response = result.AssistantMessage;
-            _chatHistory.Add(new ChatEntry(result.AssistantMessage, false));
+            State.Thinking = result.Thinking ?? "";
+            State.Response = result.AssistantMessage;
+            State.ChatHistory.Add(new DesignStudioState.ChatEntry(result.AssistantMessage, false));
 
             if (result.Type is "model_ready" or "model_updated" && result.ModelId.HasValue)
             {
-                _modelUrl = $"/api/model/{result.ModelId}/download";
+                State.ModelUrl = $"/api/model/{result.ModelId}/download";
 
                 if (result.Metadata != null && result.Metadata.TryGetValue("_scene", out var sceneVal))
                 {
-                    _sceneData = sceneVal switch
+                    State.SceneData = sceneVal switch
                     {
                         string s => s,
                         System.Text.Json.JsonElement je => je.GetString(),
@@ -128,13 +170,39 @@
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { _response = $"Error: {ex.Message}"; }
+        catch (Exception ex) { State.Response = $"Error: {ex.Message}"; }
         finally
         {
-            _sending = false;
+            State.Sending = false;
             StateHasChanged();
         }
     }
 
-    private record ChatEntry(string Text, bool IsUser);
+    private async Task NewChat()
+    {
+        _cts?.Cancel();
+        State.Reset();
+        _isLoading = true;
+        StateHasChanged();
+
+        Logger.LogInformation("[DesignStudio] NewChat — starting fresh session");
+        try
+        {
+            var session = await SessionManager.CreateSession("user-default");
+            State.SessionId = session.SessionId;
+            State.IsInitialized = true;
+            Logger.LogInformation("[DesignStudio] New session created: {SessionId}", State.SessionId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[DesignStudio] NewChat CreateSession failed");
+            State.SessionId = Guid.NewGuid();
+            State.IsInitialized = true;
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 }

@@ -81,13 +81,25 @@ public class NluService : INluService
 
     private static string BuildIntentPrompt(string text, string? context)
     {
-        return GetIntentClassificationTemplate().Replace("{{input}}", text);
+        var prompt = GetIntentClassificationTemplate();
+        if (!string.IsNullOrWhiteSpace(context))
+        {
+            prompt = prompt.Replace("{{context}}", context);
+        }
+        else
+        {
+            prompt = prompt.Replace("{{context}}", "No active model currently exists.");
+        }
+        return prompt.Replace("{{input}}", text);
     }
 
     private static string GetIntentClassificationTemplate()
     {
         return @"
 You are an NLU engine for a 3D design assistant. Classify intent and extract entities with parameters.
+
+Current scene context:
+{{context}}
 
 Intents:
 - Create: user wants a new 3D model

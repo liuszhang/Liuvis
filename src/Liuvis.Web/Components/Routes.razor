@@ -4,3 +4,15 @@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    protected override void OnInitialized()
+    {
+        System.Diagnostics.Debug.WriteLine("[Routes] OnInitialized");
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        System.Diagnostics.Debug.WriteLine($"[Routes] OnAfterRender firstRender={firstRender}");
+    }
+}

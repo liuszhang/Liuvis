@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Liuvis.Core.Entities;
 
 namespace Liuvis.Infrastructure.Persistence;
@@ -38,7 +39,11 @@ public class LiuvisDbContext : DbContext
                 .HasColumnType("jsonb")
                 .HasConversion(
                     v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                    v => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new());
+                    v => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new())
+                .Metadata.SetValueComparer(new ValueComparer<Dictionary<string, object>>(
+                    (a, b) => (a == null && b == null) || (a != null && b != null && a.Count == b.Count && !a.Except(b).Any()),
+                    v => v == null ? 0 : v.Aggregate(0, (h, kv) => HashCode.Combine(h, kv.Key.GetHashCode(), kv.Value == null ? 0 : kv.Value.GetHashCode())),
+                    v => v == null ? null! : new Dictionary<string, object>(v)));
             entity.HasOne<Session>().WithMany(s => s.Messages).HasForeignKey(e => e.SessionId).OnDelete(DeleteBehavior.Cascade);
         });
 

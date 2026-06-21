@@ -14,6 +14,7 @@ public class SessionRepository
 
     public async Task<Session?> GetByIdAsync(Guid sessionId, CancellationToken ct = default)
         => await _db.Sessions
+            .AsNoTracking()
             .Include(s => s.Messages.OrderByDescending(m => m.Timestamp).Take(20))
             .FirstOrDefaultAsync(s => s.SessionId == sessionId, ct);
 

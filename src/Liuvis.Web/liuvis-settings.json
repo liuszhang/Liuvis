@@ -1,0 +1,14 @@
+{
+  "Liuvis": {
+    "Llm": {
+      "provider": "openai",
+      "ollamaUrl": "http://localhost:11434",
+      "ollamaModel": "qwen3:4b",
+      "openAIApiKey": "sk-a5e15fb8e6664b77afbcd454956769c9",
+      "openAIBaseUrl": "https://api.deepseek.com",
+      "openAIModel": "deepseek-v4-pro",
+      "maxTokens": 2000,
+      "temperature": 0.3
+    }
+  }
+}

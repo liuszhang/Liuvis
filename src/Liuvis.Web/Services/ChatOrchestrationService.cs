@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.SignalR;
 namespace Liuvis.Web.Services;
 
 /// <summary>
-/// Orchestrates the Chat → NLU → Design → Generation pipeline.
+/// Orchestrates the Chat �?NLU �?Design �?Generation pipeline.
 /// Broadcasts progress and model events via SignalR to all clients in the session.
 /// </summary>
 public class ChatOrchestrationService
@@ -63,7 +63,28 @@ public class ChatOrchestrationService
 
         await NotifyProgress(sessionId, "Analyzing your request...");
 
-        var intent = await _nluService.ParseIntent(message, cancellationToken: cancellationToken);
+        // Build model context for NLU if a model exists
+        string? modelContext = null;
+        if (session.CurrentModelId != null)
+        {
+            try
+            {
+                var currentModel = await _modelGenerator.GetModel(session.CurrentModelId.Value, cancellationToken);
+                if (currentModel != null)
+                {
+                    modelContext = BuildModelContext(currentModel);
+                    _logger.LogInformation("Pipeline: Built model context for NLU, Model={ModelId}, Components={Count}",
+                        currentModel.ModelId, currentModel.Components.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Pipeline: Failed to load model {ModelId} for NLU context, proceeding without context",
+                    session.CurrentModelId);
+            }
+        }
+
+        var intent = await _nluService.ParseIntent(message, modelContext, cancellationToken);
         await NotifyProgress(sessionId, $"Intent: {FormatIntent(intent.IntentType)} (confidence: {intent.Confidence:P0})");
 
         if (!string.IsNullOrEmpty(intent.Thinking))
@@ -426,4 +447,26 @@ public class ChatOrchestrationService
         IntentType.Query => "Query",
         _ => "Unknown"
     };
+
+    private static string BuildModelContext(Core.Entities.Model3D model)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Active model: {model.Name} (version {model.Version})");
+        if (model.Components.Count > 0)
+        {
+            sb.AppendLine("Components:");
+            foreach (var c in model.Components)
+            {
+                var mat = c.Material;
+                var color = mat?.Color ?? "default";
+                var matType = mat?.Type.ToString() ?? "standard";
+                sb.AppendLine($"- {c.Name}: geometry={c.GeometryType}, color={color}, material={matType}");
+            }
+        }
+        else
+        {
+            sb.AppendLine("No components.");
+        }
+        return sb.ToString().TrimEnd();
+    }
 }

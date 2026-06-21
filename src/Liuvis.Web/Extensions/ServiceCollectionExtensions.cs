@@ -27,9 +27,11 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddLiuvisApplicationServices(
         this IServiceCollection services, IConfiguration configuration)
     {
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         // Database — EF Core + PostgreSQL
-        // ---------------------------------------------------------------------
+        // Connection string includes Timeout=2;Command Timeout=2 so Npgsql fails
+        // fast when PostgreSQL is not running, instead of blocking for 93s.
+        // -------------------------------------------------------------------------
         var connectionString = configuration.GetConnectionString("DefaultConnection");
         services.AddDbContext<LiuvisDbContext>(options =>
         {
@@ -39,72 +41,78 @@ public static class ServiceCollectionExtensions
             });
         });
 
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         // Repositories
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         services.AddScoped<SessionRepository>();
         services.AddScoped<ModelRepository>();
         services.AddScoped<KnowledgeEntryRepository>();
 
-        // ---------------------------------------------------------------------
-        // Settings Service
-        // ---------------------------------------------------------------------
-        services.AddScoped<ISettingsService, SettingsService>();
+        // -------------------------------------------------------------------------
+        // Settings Service — file-based (liuvis-settings.json), no DB dependency
+        // -------------------------------------------------------------------------
+        services.AddSingleton<ISettingsService, SettingsService>();
 
-        // ---------------------------------------------------------------------
-        // LLM Client — provider switching based on persisted settings
-        // ---------------------------------------------------------------------
-        services.AddScoped<ILlmClient>(sp =>
+        // -------------------------------------------------------------------------
+        // LLM Client — provider switching based on IConfiguration (appsettings.json
+        // + liuvis-settings.json overrides). Zero DB dependency, zero blocking.
+        // -------------------------------------------------------------------------
+        services.AddTransient<ILlmClient>(sp =>
         {
-            LlmSettings settings;
-            try
-            {
-                settings = sp.GetRequiredService<ISettingsService>()
-                    .GetLlmSettingsAsync().GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                var fallbackLogger = sp.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("Liuvis.Web");
-                fallbackLogger.LogWarning(ex, "Failed to load LLM settings from DB, using defaults");
-                settings = new Liuvis.Core.Interfaces.LlmSettings();
-            }
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Liuvis.DI.Build");
+            var config = sp.GetRequiredService<IConfiguration>();
+            var settings = config.GetSection("Liuvis:Llm").Get<LlmSettings>() ?? new LlmSettings();
+
+            // --- 诊断：打印原始配置值，确认 binding 是否生效 ---
+            var rawBaseUrl = config["Liuvis:Llm:openAIBaseUrl"]
+                           ?? config["Liuvis:Llm:OpenAIBaseUrl"]
+                           ?? "(not found in config)";
+            logger.LogInformation("[DI.Build] LLM settings from config: Provider={Provider}, RawBaseUrl={RawBaseUrl}, BoundBaseUrl={BoundBaseUrl}, Model={Model}",
+                settings.Provider, rawBaseUrl, settings.OpenAIBaseUrl, settings.OllamaModel ?? settings.OpenAIModel ?? "unknown");
 
             if (settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.OpenAIApiKey))
             {
                 var model = settings.OpenAIModel ?? "gpt-4o";
-                var logger = sp.GetRequiredService<ILogger<OpenAIClient>>();
-                logger.LogInformation("Using OpenAI provider: {Endpoint}, model: {Model}",
-                    settings.OpenAIBaseUrl, model);
+                var openAiLogger = sp.GetRequiredService<ILogger<OpenAIClient>>();
+
+                // --- 兜底：如果 ConfigurationBinder 未绑定 BaseUrl，手动读取 ---
+                var effectiveBaseUrl = !string.IsNullOrWhiteSpace(settings.OpenAIBaseUrl)
+                    && settings.OpenAIBaseUrl != "https://api.openai.com/v1"
+                    ? settings.OpenAIBaseUrl
+                    : (config["Liuvis:Llm:openAIBaseUrl"] ?? config["Liuvis:Llm:OpenAIBaseUrl"] ?? settings.OpenAIBaseUrl);
+
+                openAiLogger.LogInformation("[DI.Build] Using OpenAI provider: Endpoint={Endpoint}, Model={Model}",
+                    effectiveBaseUrl, model);
                 return new OpenAIClient(
                     apiKey: settings.OpenAIApiKey,
-                    baseUrl: settings.OpenAIBaseUrl,
+                    baseUrl: effectiveBaseUrl,
                     model: model,
                     embeddingModel: "text-embedding-3-small",
                     maxTokens: settings.MaxTokens,
                     temperature: settings.Temperature,
-                    logger: logger);
+                    logger: openAiLogger);
             }
 
             if (settings.Provider == "openai")
             {
-                var logger = sp.GetRequiredService<ILogger<OllamaClient>>();
-                logger.LogWarning("OpenAI selected but no API key configured, falling back to Ollama");
+                var ollamaLogger = sp.GetRequiredService<ILogger<OllamaClient>>();
+                ollamaLogger.LogWarning("[DI.Build] OpenAI selected but no API key configured, falling back to Ollama");
             }
 
             var endpoint = new Uri(settings.OllamaUrl);
-            return new OllamaClient(endpoint, settings.OllamaModel,
+            logger.LogInformation("[DI.Build] Using Ollama provider: {Url}, model: {Model}", settings.OllamaUrl, settings.OllamaModel);
+            return new OllamaClient(endpoint, settings.OllamaModel ?? "qwen3:4b",
                 sp.GetRequiredService<ILogger<OllamaClient>>());
         });
 
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         // Vector Search
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         services.AddScoped<IVectorSearchService, PgvectorService>();
 
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         // Object Storage — Provider switching convention
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         var storageProvider = configuration.GetValue<string>("Storage:Provider") ?? "Local";
 
         switch (storageProvider.ToLowerInvariant())
@@ -120,15 +128,15 @@ public static class ServiceCollectionExtensions
                 break;
         }
 
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         // Generation Services (LLM-driven procedural geometry)
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         services.AddScoped<LLMDesignService>();
         services.AddScoped<ProceduralGeometryBuilder>();
 
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         // Business Services (core module implementations)
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         services.AddScoped<INluService, NluService>();
         services.AddScoped<ISessionManager, SessionManager>();
         services.AddScoped<IDesignEngine, DesignEngine>();
@@ -136,15 +144,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IModificationEngine, ModificationEngine>();
         services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
 
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         // Orchestration Services (Blazor-friendly pipeline wrappers)
-        // ---------------------------------------------------------------------
+        // -------------------------------------------------------------------------
         services.AddScoped<ChatOrchestrationService>();
 
-        // ---------------------------------------------------------------------
-        // Configuration
-        // ---------------------------------------------------------------------
-        services.Configure<AppSettings>(configuration);
+        // -------------------------------------------------------------------------
+        // UI State (scoped — survives route switches within the same circuit)
+        // -------------------------------------------------------------------------
+        services.AddScoped<DesignStudioState>();
 
         return services;
     }
