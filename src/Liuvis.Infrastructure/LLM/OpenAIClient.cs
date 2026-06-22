@@ -274,8 +274,9 @@ public class OpenAIClient : ILlmClient
     }
 
     /// <summary>
-    /// Normalizes a custom endpoint URL to end with /v1 for OpenAI SDK 2.x compatibility.
-    /// DeepSeek, Groq, and other providers expect /v1/chat/completions rather than /anthropic or other paths.
+    /// Normalizes a custom endpoint URL for OpenAI SDK 2.x compatibility.
+    /// If the URL already has a custom path (e.g. /api/paas/v4), it is preserved as-is.
+    /// Only bare domains without a path get /v1 appended.
     /// </summary>
     private static string NormalizeEndpoint(string url)
     {
@@ -286,11 +287,12 @@ public class OpenAIClient : ILlmClient
 
         var uri = new Uri(url.TrimEnd('/'));
 
-        // Already ends with /v1
-        if (uri.AbsolutePath == "/v1" || uri.AbsolutePath.EndsWith("/v1"))
+        // Has a custom path beyond just the root — preserve it
+        // e.g. /api/paas/v4, /v1, /api/v1
+        if (uri.AbsolutePath != "/")
             return uri.ToString().TrimEnd('/');
 
-        // Strip custom path, use /v1 as base
+        // Bare domain with no path — append /v1 for standard OpenAI-compatible APIs
         return $"{uri.Scheme}://{uri.Authority}/v1";
     }
 }

@@ -11,12 +11,14 @@ namespace Liuvis.Generation.Services;
 public class LLMDesignService
 {
     private readonly ILlmClient _llmClient;
+    private readonly ISettingsService _settingsService;
     private readonly ILogger<LLMDesignService> _logger;
     private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
 
-    public LLMDesignService(ILlmClient llmClient, ILogger<LLMDesignService> logger)
+    public LLMDesignService(ILlmClient llmClient, ISettingsService settingsService, ILogger<LLMDesignService> logger)
     {
         _llmClient = llmClient;
+        _settingsService = settingsService;
         _logger = logger;
     }
 
@@ -24,7 +26,8 @@ public class LLMDesignService
     {
         _logger.LogInformation("LLM generating scene from: {Description}", description[..Math.Min(description.Length, 100)]);
 
-        var prompt = BuildScenePrompt(description);
+        var promptSettings = await _settingsService.GetPromptSettingsAsync(ct);
+        var prompt = promptSettings.SceneGenerationPrompt.Replace("{{description}}", description);
         var response = await _llmClient.CompleteAsync(prompt, null, ct);
         var json = ExtractJson(response);
 
@@ -59,37 +62,6 @@ public class LLMDesignService
             }
         };
     }
-
-    private static string BuildScenePrompt(string description) => @"
-You are a 3D modeling expert. Convert the user's description into a structured JSON scene definition.
-
-Rules:
-- Output ONLY valid JSON, no markdown fences, no explanations.
-- Use standard geometry types: box, sphere, cylinder, cone.
-- Sizes: box [width, height, depth], sphere [radius, latSegments, lonSegments], cylinder/cone [radius, height, segments].
-- Colors in hex format (e.g. ""#ff0000"" for red).
-- Position in [x, y, z] coordinates.
-- Include material properties (metalness, roughness).
-
-Output format:
-{
-  ""objects"": [
-    {
-      ""type"": ""box"",
-      ""size"": [1.0, 1.0, 1.0],
-      ""position"": [0.0, 0.0, 0.0],
-      ""rotation"": [0.0, 0.0, 0.0],
-      ""color"": ""#ff0000"",
-      ""material"": { ""metalness"": 0.5, ""roughness"": 0.3 }
-    }
-  ]
-}
-
-Examples:
-- ""a blue cube"" -> { ""objects"": [{ ""type"": ""box"", ""size"": [1,1,1], ""position"": [0,0,0], ""color"": ""#0000ff"" }] }
-- ""a red sphere on a green cylinder"" -> { ""objects"": [{ ""type"": ""cylinder"", ""size"": [0.5,2,32], ""position"": [0,0,0], ""color"": ""#00ff00"" }, { ""type"": ""sphere"", ""size"": [0.6,32,32], ""position"": [0,2,0], ""color"": ""#ff0000"" }] }
-
-User description: " + description;
 
     private static string ExtractJson(string raw)
     {

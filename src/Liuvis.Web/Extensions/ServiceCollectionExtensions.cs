@@ -49,46 +49,35 @@ public static class ServiceCollectionExtensions
         services.AddScoped<KnowledgeEntryRepository>();
 
         // -------------------------------------------------------------------------
-        // Settings Service — file-based (liuvis-settings.json), no DB dependency
+        // Settings Service — DB-backed (app_settings table)
         // -------------------------------------------------------------------------
         services.AddSingleton<ISettingsService, SettingsService>();
 
         // -------------------------------------------------------------------------
-        // LLM Client — provider switching based on IConfiguration (appsettings.json
-        // + liuvis-settings.json overrides). Zero DB dependency, zero blocking.
+        // LLM Client — provider switching based on settings cached from DB.
+        // SettingsService.PreloadFromDb must be called at startup before first resolution.
         // -------------------------------------------------------------------------
         services.AddTransient<ILlmClient>(sp =>
         {
             var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Liuvis.DI.Build");
-            var config = sp.GetRequiredService<IConfiguration>();
-            var settings = config.GetSection("Liuvis:Llm").Get<LlmSettings>() ?? new LlmSettings();
+            var settings = SettingsService.GetCachedLlmSettings();
 
-            // --- 诊断：打印原始配置值，确认 binding 是否生效 ---
-            var rawBaseUrl = config["Liuvis:Llm:openAIBaseUrl"]
-                           ?? config["Liuvis:Llm:OpenAIBaseUrl"]
-                           ?? "(not found in config)";
             var displayModel = settings.Provider == "openai"
                 ? (settings.OpenAIModel ?? "unknown")
                 : (settings.OllamaModel ?? settings.OpenAIModel ?? "unknown");
-            logger.LogInformation("[DI.Build] LLM settings from config: Provider={Provider}, RawBaseUrl={RawBaseUrl}, BoundBaseUrl={BoundBaseUrl}, Model={Model}",
-                settings.Provider, rawBaseUrl, settings.OpenAIBaseUrl, displayModel);
+            logger.LogInformation("[DI.Build] LLM settings from DB: Provider={Provider}, BaseUrl={BaseUrl}, Model={Model}",
+                settings.Provider, settings.OpenAIBaseUrl, displayModel);
 
             if (settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.OpenAIApiKey))
             {
                 var model = settings.OpenAIModel ?? "gpt-4o";
                 var openAiLogger = sp.GetRequiredService<ILogger<OpenAIClient>>();
 
-                // --- 兜底：如果 ConfigurationBinder 未绑定 BaseUrl，手动读取 ---
-                var effectiveBaseUrl = !string.IsNullOrWhiteSpace(settings.OpenAIBaseUrl)
-                    && settings.OpenAIBaseUrl != "https://api.openai.com/v1"
-                    ? settings.OpenAIBaseUrl
-                    : (config["Liuvis:Llm:openAIBaseUrl"] ?? config["Liuvis:Llm:OpenAIBaseUrl"] ?? settings.OpenAIBaseUrl);
-
                 openAiLogger.LogInformation("[DI.Build] Using OpenAI provider: Endpoint={Endpoint}, Model={Model}",
-                    effectiveBaseUrl, model);
+                    settings.OpenAIBaseUrl, model);
                 return new OpenAIClient(
                     apiKey: settings.OpenAIApiKey,
-                    baseUrl: effectiveBaseUrl,
+                    baseUrl: settings.OpenAIBaseUrl,
                     model: model,
                     embeddingModel: "text-embedding-3-small",
                     maxTokens: settings.MaxTokens,

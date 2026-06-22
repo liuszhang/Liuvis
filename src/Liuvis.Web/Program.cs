@@ -17,9 +17,6 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    // User overrides file — created on first Settings save, loaded with reloadOnChange
-    builder.Configuration.AddJsonFile("liuvis-settings.json", optional: true, reloadOnChange: true);
-
     builder.Host.UseSerilog();
 
     // -------------------------------------------------------------------------
@@ -76,6 +73,11 @@ try
     // 7. SignalR
     // -------------------------------------------------------------------------
     builder.Services.AddSignalR();
+
+    // -------------------------------------------------------------------------
+    // 8. HttpClient
+    // -------------------------------------------------------------------------
+    builder.Services.AddHttpClient();
 
     // -------------------------------------------------------------------------
     // 8. Application Services (via extension method)

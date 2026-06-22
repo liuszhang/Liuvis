@@ -11,6 +11,7 @@ namespace Liuvis.NLU.Services;
 public class NluService : INluService
 {
     private readonly ILlmClient _llmClient;
+    private readonly ISettingsService _settingsService;
     private readonly ILogger<NluService> _logger;
     private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
 
@@ -22,9 +23,10 @@ public class NluService : INluService
         ["unknown"] = IntentType.Unknown,
     };
 
-    public NluService(ILlmClient llmClient, ILogger<NluService> logger)
+    public NluService(ILlmClient llmClient, ISettingsService settingsService, ILogger<NluService> logger)
     {
         _llmClient = llmClient;
+        _settingsService = settingsService;
         _logger = logger;
     }
 
@@ -37,7 +39,7 @@ public class NluService : INluService
         try
         {
             var thinkSb = new System.Text.StringBuilder();
-            var prompt = BuildIntentPrompt(text, context);
+            var prompt = await BuildIntentPromptAsync(text, context);
             var rawResponse = await _llmClient.CompleteWithThinkingAsync(prompt, null,
                 onThinking: t => { thinkSb.Append(t); onThinking?.Invoke(t); },
                 onToken: null, cancellationToken);
@@ -82,9 +84,10 @@ public class NluService : INluService
         }
     }
 
-    private static string BuildIntentPrompt(string text, string? context)
+    private async Task<string> BuildIntentPromptAsync(string text, string? context)
     {
-        var prompt = GetIntentClassificationTemplate();
+        var promptSettings = await _settingsService.GetPromptSettingsAsync();
+        var prompt = promptSettings.NluPrompt;
         if (!string.IsNullOrWhiteSpace(context))
         {
             prompt = prompt.Replace("{{context}}", context);
@@ -94,43 +97,6 @@ public class NluService : INluService
             prompt = prompt.Replace("{{context}}", "No active model currently exists.");
         }
         return prompt.Replace("{{input}}", text);
-    }
-
-    private static string GetIntentClassificationTemplate()
-    {
-        return @"
-You are an NLU engine for a 3D design assistant. Classify intent and extract entities with parameters.
-
-Current scene context:
-{{context}}
-
-Intents:
-- Create: user wants a new 3D model
-- Modify: user wants to change an existing model (color, material, size, position)
-- Query: user asks a question
-- Unknown: unclear intent
-
-For Modify intent, extract these Parameters:
-- changeType: ""color"" | ""material"" | ""size"" | ""transform""
-- color: hex color string like ""#ff0000"" (for color changes)
-- targetComponent: component name or ""all""
-- roughness: 0.0-1.0 (for material changes)
-- metalness: 0.0-1.0 (for material changes)
-- scale: number (for size changes)
-- scaleX, scaleY, scaleZ: numbers (for per-axis size changes)
-
-Examples:
-- ""Make it red"" → Modify, changeType=color, color=""#ff0000"", targetComponent=""all""
-- ""Change the cube to blue"" → Modify, changeType=color, color=""#0000ff"", targetComponent=""cube""
-- ""Make it metallic"" → Modify, changeType=material, metalness=0.9, roughness=0.1
-- ""Scale it up 2x"" → Modify, changeType=size, scale=2.0
-- ""Create a red sphere"" → Create
-
-Respond with valid JSON only:
-{ ""Intent"": ""Create|Modify|Query|Unknown"", ""Confidence"": 0.0-1.0, ""Entities"": [{ ""Type"": ""..."", ""Value"": ""..."", ""Start"": 0, ""End"": 0 }], ""Parameters"": {} }
-
-User input: {{input}}
-";
     }
 
     private static string ExtractJson(string raw)

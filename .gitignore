@@ -47,3 +47,6 @@ Thumbs.db
 ## Dev
 Docs
 .workbuddy/
+
+## Settings (contains secrets)
+src/Liuvis.Web/liuvis-settings.json

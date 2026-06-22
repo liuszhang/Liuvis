@@ -19,26 +19,96 @@
         <MudCard Elevation="0" Class="mt-4">
             <MudCardContent>
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
-                    <MudText Typo="Typo.h6">AI Language Model Settings</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
-                        @GetActiveModelDisplay()
-                    </MudChip>
+                    <MudText Typo="Typo.h6">AI Language Model Providers</MudText>
+                    @if (_activeProvider is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                            Active: @_activeProvider.Name
+                        </MudChip>
+                    }
                 </div>
 
-                <MudStack Spacing="4">
-                        @* --- Provider Selection --- *@
+                @* --- Provider List --- *@
+                <MudTable Items="_providers" Hover="true" Dense="true" Elevation="0"
+                    Loading="_isLoadingProviders" Striped="true">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Provider</MudTh>
+                        <MudTh>Model</MudTh>
+                        <MudTh>Base URL</MudTh>
+                        <MudTh Style="text-align:right">Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                @if (context.IsActive)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                }
+                                <MudText>@context.Name</MudText>
+                            </MudStack>
+                        </MudTd>
+                        <MudTd DataLabel="Provider">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                @context.Provider
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Model">@(context.Provider == "ollama" ? context.OllamaModel : context.Model)</MudTd>
+                        <MudTd DataLabel="Base URL">
+                            @(context.Provider == "ollama" ? context.OllamaUrl : context.BaseUrl)
+                        </MudTd>
+                        <MudTd Style="text-align:right">
+                            <MudButtonGroup Size="Size.Small" Variant="Variant.Text">
+                                @if (!context.IsActive)
+                                {
+                                    <MudButton Color="Color.Primary" OnClick="@(() => ActivateProviderAsync(context))"
+                                        StartIcon="@Icons.Material.Filled.PlayArrow">Activate</MudButton>
+                                }
+                                <MudButton Color="Color.Default" OnClick="@(() => EditProviderAsync(context))"
+                                    StartIcon="@Icons.Material.Filled.Edit">Edit</MudButton>
+                                <MudButton Color="Color.Error" OnClick="@(() => DeleteProviderAsync(context))"
+                                    StartIcon="@Icons.Material.Filled.Delete">Delete</MudButton>
+                            </MudButtonGroup>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-4 mud-text-secondary">No providers configured. Click "Add Provider" to get started.</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-4"
+                    OnClick="AddProviderAsync" StartIcon="@Icons.Material.Filled.Add">
+                    Add Provider
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+
+        @* --- Edit / Add Dialog --- *@
+        @if (_editDialogOpen)
+        {
+            <MudCard Elevation="2" Class="mt-4">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-4">
+                        @(_editingProvider.Id == 0 ? "Add New Provider" : $"Edit: {_editingProvider.Name}")
+                    </MudText>
+
+                    <MudStack Spacing="4">
+                        <MudTextField @bind-Value="_editingProvider.Name" Label="Name"
+                            HelperText="A descriptive name for this provider"
+                            Variant="Variant.Outlined" Required="true" />
+
                         <div>
                             <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Connection Mode</MudText>
-                            <MudToggleGroup Value="_provider" ValueChanged="OnProviderChanged" T="string"
+                            <MudToggleGroup @bind-Value="_editingProvider.Provider" T="string"
                                 SelectionMode="SelectionMode.SingleSelection">
                                 <MudToggleItem T="string" Value="@("ollama")">
-                                    <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                         <MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Small" />
                                         <MudText>Local Ollama</MudText>
                                     </MudStack>
                                 </MudToggleItem>
                                 <MudToggleItem T="string" Value="@("openai")">
-                                    <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                         <MudIcon Icon="@Icons.Material.Filled.Cloud" Size="Size.Small" />
                                         <MudText>Custom API Key</MudText>
                                     </MudStack>
@@ -46,78 +116,69 @@
                             </MudToggleGroup>
                         </div>
 
-                        <MudDivider />
-
-                        @* --- Provider-specific Settings --- *@
-                        <div style="display:@(_provider == "ollama" ? "block" : "none")">
-                            <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Ollama Server</MudText>
+                        @if (_editingProvider.Provider == "ollama")
+                        {
                             <MudGrid Spacing="3">
                                 <MudItem xs="12" md="8">
-                                    <MudTextField @bind-Value="_llm.OllamaUrl" Label="URL"
-                                        HelperText="e.g. http://localhost:11434" Variant="Variant.Outlined"
-                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
+                                    <MudTextField @bind-Value="_editingProvider.OllamaUrl" Label="URL"
+                                        HelperText="e.g. http://localhost:11434" Variant="Variant.Outlined" />
                                 </MudItem>
                                 <MudItem xs="12" md="4">
-                                    <MudTextField @bind-Value="_llm.OllamaModel" Label="Model"
-                                        HelperText="e.g. qwen3:4b, llama3" Variant="Variant.Outlined"
-                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Memory" />
+                                    <MudTextField @bind-Value="_editingProvider.OllamaModel" Label="Model"
+                                        HelperText="e.g. qwen3:4b" Variant="Variant.Outlined" />
                                 </MudItem>
                             </MudGrid>
-                        </div>
-
-                        <div style="display:@(_provider == "openai" ? "block" : "none")">
-                            <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">OpenAI / Compatible API</MudText>
+                        }
+                        else
+                        {
                             <MudGrid Spacing="3">
-                                <MudItem xs="12" md="6">
-                                    <MudTextField @bind-Value="_llm.OpenAIApiKey" Label="API Key"
-                                        HelperText="sk-... or custom API key" Variant="Variant.Outlined"
-                                        InputType="@(_showApiKey ? InputType.Text : InputType.Password)"                                        
-                                        Adornment="@(Adornment.End)"
-                                        AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                                              OnAdornmentClick="ToggleApiKeyVisibility" />
+                                <MudItem xs="12" md="4">
+                                    <MudTextField @bind-Value="_editingProvider.ApiKey" Label="API Key"
+                                        HelperText="sk-..." Variant="Variant.Outlined"
+                                        InputType="@(_showEditApiKey ? InputType.Text : InputType.Password)"
+                                        Adornment="Adornment.End"
+                                        AdornmentIcon="@(_showEditApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                        OnAdornmentClick="() => _showEditApiKey = !_showEditApiKey" />
                                 </MudItem>
-                                <MudItem xs="12" md="3">
-                                    <MudTextField @bind-Value="_llm.OpenAIBaseUrl" Label="Base URL"
-                                        HelperText="e.g. https://api.openai.com/v1" Variant="Variant.Outlined"
-                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
+                                <MudItem xs="12" md="4">
+                                    <MudTextField @bind-Value="_editingProvider.BaseUrl" Label="Base URL"
+                                        HelperText="e.g. https://api.deepseek.com" Variant="Variant.Outlined" />
                                 </MudItem>
-                                <MudItem xs="12" md="3">
-                                    <MudTextField @bind-Value="_llm.OpenAIModel" Label="Model"
-                                        HelperText="e.g. gpt-4o" Variant="Variant.Outlined"
-                                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Memory" />
+                                <MudItem xs="12" md="4">
+                                    <MudTextField @bind-Value="_editingProvider.Model" Label="Model"
+                                        HelperText="e.g. deepseek-v4-pro" Variant="Variant.Outlined" />
                                 </MudItem>
                             </MudGrid>
-                        </div>
+                        }
 
                         <MudDivider />
 
-                        @* --- Common Settings --- *@
-                        <div>
-                            <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Generation Parameters</MudText>
-                            <MudGrid Spacing="3">
-                                <MudItem xs="6" md="3">
-                                    <MudNumericField @bind-Value="_llm.MaxTokens" Label="Max Tokens"
-                                        Variant="Variant.Outlined" Min="100" Max="32000" Step="100" />
-                                </MudItem>
-                                <MudItem xs="6" md="3">
-                                    <MudNumericField @bind-Value="_llm.TemperatureValue" Label="Temperature"
-                                        Variant="Variant.Outlined" Min="0.0" Max="2.0" Step="0.1" Format="F1" />
-                                </MudItem>
-                            </MudGrid>
-                        </div>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Generation Parameters</MudText>
+                        <MudGrid Spacing="3">
+                            <MudItem xs="6" md="3">
+                                <MudNumericField @bind-Value="_editingProvider.MaxTokens" Label="Max Tokens"
+                                    Variant="Variant.Outlined" Min="100" Max="32000" Step="100" />
+                            </MudItem>
+                            <MudItem xs="6" md="3">
+                                <MudNumericField @bind-Value="_editingProvider.Temperature" Label="Temperature"
+                                    Variant="Variant.Outlined" Min="0.0" Max="2.0" Step="0.1" Format="F1" />
+                            </MudItem>
+                        </MudGrid>
                     </MudStack>
-            </MudCardContent>
+                </MudCardContent>
 
-            <MudCardActions Class="pa-4">
-                <MudSpacer />
-                <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                    OnClick="SaveAsync" Disabled="_saving"
-                    StartIcon="@Icons.Material.Filled.Save">
-                    @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
-                    Save Configuration
-                </MudButton>
-            </MudCardActions>
-        </MudCard>
+                <MudCardActions Class="pa-4">
+                    <MudSpacer />
+                    <MudButton Variant="Variant.Text" OnClick="CancelEdit" Class="mr-2">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                        OnClick="SaveProviderAsync" Disabled="_savingProvider"
+                        StartIcon="@Icons.Material.Filled.Save">
+                        @if (_savingProvider) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                        Save
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        }
     </MudTabPanel>
 
     <MudTabPanel Text="General">
@@ -141,25 +202,24 @@
                 </div>
 
                 <MudStack Spacing="4">
-                    @* --- Generation Mode --- *@
                     <div>
                         <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Generation Mode</MudText>
-                        <MudToggleGroup Value="_genMode" ValueChanged="OnGenModeChanged" T="string"
+                        <MudToggleGroup @bind-Value="_genMode" T="string"
                             SelectionMode="SelectionMode.SingleSelection">
                             <MudToggleItem T="string" Value="@("llm")">
-                                <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                     <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" />
                                     <MudText>LLM Direct</MudText>
                                 </MudStack>
                             </MudToggleItem>
                             <MudToggleItem T="string" Value="@("mcp")">
-                                <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                     <MudIcon Icon="@Icons.Material.Filled.IntegrationInstructions" Size="Size.Small" />
                                     <MudText>MCP Tool</MudText>
                                 </MudStack>
                             </MudToggleItem>
                             <MudToggleItem T="string" Value="@("fake")">
-                                <MudStack Row="true" Spacing="1" align="@Align.Center">
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                     <MudIcon Icon="@Icons.Material.Filled.DataObject" Size="Size.Small" />
                                     <MudText>Fake Sample</MudText>
                                 </MudStack>
@@ -169,33 +229,31 @@
 
                     <MudDivider />
 
-                    @* --- MCP Tool Settings --- *@
-                    <div style="display:@(_genMode == "mcp" ? "block" : "none")">
+                    @if (_genMode == "mcp")
+                    {
                         <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">MCP Tool Configuration</MudText>
                         <MudGrid Spacing="3">
                             <MudItem xs="12" md="6">
                                 <MudTextField @bind-Value="_gen.McpServerUrl" Label="MCP Server URL"
-                                    HelperText="e.g. http://localhost:8080" Variant="Variant.Outlined"
-                                    Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
+                                    HelperText="e.g. http://localhost:8080" Variant="Variant.Outlined" />
                             </MudItem>
                             <MudItem xs="12" md="3">
                                 <MudTextField @bind-Value="_gen.McpToolName" Label="Tool Name"
-                                    HelperText="e.g. generate_model" Variant="Variant.Outlined"
-                                    Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Build" />
+                                    HelperText="e.g. generate_model" Variant="Variant.Outlined" />
                             </MudItem>
                             <MudItem xs="12" md="3">
                                 <MudTextField @bind-Value="_gen.McpApiKey" Label="API Key"
-                                    HelperText="Optional authentication" Variant="Variant.Outlined"
+                                    HelperText="Optional" Variant="Variant.Outlined"
                                     InputType="@(_showMcpKey ? InputType.Text : InputType.Password)"
-                                    Adornment="@(Adornment.End)"
+                                    Adornment="Adornment.End"
                                     AdornmentIcon="@(_showMcpKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                                    OnAdornmentClick="ToggleMcpKeyVisibility" />
+                                    OnAdornmentClick="() => _showMcpKey = !_showMcpKey" />
                             </MudItem>
                         </MudGrid>
-                    </div>
+                    }
 
-                    @* --- Fake Model Settings --- *@
-                    <div style="display:@(_genMode == "fake" ? "block" : "none")">
+                    @if (_genMode == "fake")
+                    {
                         <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Fake Model Configuration</MudText>
                         <MudGrid Spacing="3">
                             <MudItem xs="6" md="4">
@@ -213,14 +271,14 @@
                                     Variant="Variant.Outlined" Min="1" Max="100" Step="1" />
                             </MudItem>
                         </MudGrid>
-                    </div>
+                    }
 
-                    @* --- LLM mode hint --- *@
-                    <div style="display:@(_genMode == "llm" ? "block" : "none")">
+                    @if (_genMode == "llm")
+                    {
                         <MudAlert Severity="Severity.Info" Class="mt-2">
-                            Uses the LLM Configuration from the <strong>LLM Configuration</strong> tab for model generation.
+                            Uses the active LLM provider from the <strong>LLM Configuration</strong> tab for model generation.
                         </MudAlert>
-                    </div>
+                    }
                 </MudStack>
             </MudCardContent>
 
@@ -235,19 +293,111 @@
             </MudCardActions>
         </MudCard>
     </MudTabPanel>
+
+    <MudTabPanel Text="LLM Prompts">
+        <MudCard Elevation="0" Class="mt-4">
+            <MudCardContent>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
+                    <MudText Typo="Typo.h6">System Prompt Templates</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                        Editable
+                    </MudChip>
+                </div>
+
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                    These prompts control how the LLM behaves. Use <code>{{context}}</code>, <code>{{input}}</code>,
+                    or <code>{{description}}</code> as placeholders. Changes take effect on next request.
+                </MudText>
+
+                <MudStack Spacing="4">
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">
+                            Intent Classification Prompt
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                                NLU
+                            </MudChip>
+                        </MudText>
+                        <MudTextField @bind-Value="_prompts.NluPrompt" Lines="12" Variant="Variant.Outlined"
+                            HelperText="Classifies user intent. Placeholders: {{context}}, {{input}}" />
+                    </div>
+
+                    <MudDivider />
+
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">
+                            Query Response Prompt
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                                Query
+                            </MudChip>
+                        </MudText>
+                        <MudTextField @bind-Value="_prompts.QueryPrompt" Lines="4" Variant="Variant.Outlined"
+                            HelperText="System message when answering user questions" />
+                    </div>
+
+                    <MudDivider />
+
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">
+                            Unknown Intent Prompt
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                                Unknown
+                            </MudChip>
+                        </MudText>
+                        <MudTextField @bind-Value="_prompts.UnknownPrompt" Lines="4" Variant="Variant.Outlined"
+                            HelperText="System message when intent is unclear" />
+                    </div>
+
+                    <MudDivider />
+
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">
+                            3D Scene Generation Prompt
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                                Generation
+                            </MudChip>
+                        </MudText>
+                        <MudTextField @bind-Value="_prompts.SceneGenerationPrompt" Lines="16" Variant="Variant.Outlined"
+                            HelperText="Generates 3D scene JSON from description. Placeholder: {{description}}" />
+                    </div>
+                </MudStack>
+            </MudCardContent>
+
+            <MudCardActions Class="pa-4">
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                    OnClick="ResetPromptsAsync" Disabled="_savingPrompts"
+                    StartIcon="@Icons.Material.Filled.Restore">
+                    Reset to Defaults
+                </MudButton>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                    OnClick="SavePromptsAsync" Disabled="_savingPrompts"
+                    StartIcon="@Icons.Material.Filled.Save">
+                    @if (_savingPrompts) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                    Save Prompts
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudTabPanel>
 </MudTabs>
 
 @code {
-    private LlmSettings _llm = new();
-    private string _provider = "ollama";
+    private List<LlmProvider> _providers = new();
+    private LlmProvider? _activeProvider;
     private bool _isLoading = true;
-    private bool _saving;
-    private bool _showApiKey;
+    private bool _isLoadingProviders = true;
+
+    private LlmProvider _editingProvider = new() { Provider = "openai" };
+    private bool _editDialogOpen;
+    private bool _savingProvider;
+    private bool _showEditApiKey;
 
     private GenerationSettings _gen = new();
     private string _genMode = "llm";
     private bool _savingGen;
     private bool _showMcpKey;
+
+    private PromptSettings _prompts = new();
+    private bool _savingPrompts;
 
     protected override async Task OnInitializedAsync()
     {
@@ -258,57 +408,99 @@
         }
 
         Logger.LogInformation("[Settings] Interactive mode — loading settings");
-        await LoadSettingsAsync();
+        await LoadDataAsync();
     }
 
-    private async Task LoadSettingsAsync()
+    private async Task LoadDataAsync()
     {
-        Logger.LogInformation("[Settings] LoadSettingsAsync START");
-        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            _llm = await SettingsService.GetLlmSettingsAsync();
-            _provider = _llm.Provider;
-            Logger.LogInformation("[Settings] LLM settings loaded: Provider={Provider}", _provider);
+            _providers = await SettingsService.GetProvidersAsync();
+            _activeProvider = _providers.FirstOrDefault(p => p.IsActive);
+            _isLoadingProviders = false;
 
             _gen = await SettingsService.GetGenerationSettingsAsync();
             _genMode = _gen.Mode;
-            Logger.LogInformation("[Settings] Generation settings loaded: Mode={Mode}", _genMode);
+
+            _prompts = await SettingsService.GetPromptSettingsAsync();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "[Settings] LoadSettingsAsync FAILED (elapsed={ElapsedMs}ms), using defaults", sw.ElapsedMilliseconds);
+            Logger.LogError(ex, "[Settings] LoadDataAsync FAILED");
         }
         finally
         {
             _isLoading = false;
-            sw.Stop();
-            Logger.LogInformation("[Settings] LoadSettingsAsync END (elapsed={ElapsedMs}ms, _isLoading=false)", sw.ElapsedMilliseconds);
             await InvokeAsync(StateHasChanged);
-            Logger.LogInformation("[Settings] StateHasChanged invoked after init");
         }
     }
 
-    private void OnProviderChanged(string value)
+    // --- Provider CRUD ---
+
+    private void AddProviderAsync()
     {
-        _provider = value;
-        _llm.Provider = value;
-        StateHasChanged();
+        _editingProvider = new LlmProvider { Provider = "openai", MaxTokens = 2000, Temperature = 0.3 };
+        _editDialogOpen = true;
+        _showEditApiKey = false;
     }
 
-    private void ToggleApiKeyVisibility()
+    private void EditProviderAsync(LlmProvider provider)
     {
-        _showApiKey = !_showApiKey;
-    }
-
-    private string GetActiveModelDisplay()
-    {
-        if (_provider == "ollama")
+        _editingProvider = new LlmProvider
         {
-            return $"Ollama: {_llm.OllamaModel ?? "unknown"}";
-        }
-        return $"API: {_llm.OpenAIModel ?? "unknown"} @ {_llm.OpenAIBaseUrl ?? "default"}";
+            Id = provider.Id,
+            Name = provider.Name,
+            Provider = provider.Provider,
+            ApiKey = provider.ApiKey,
+            BaseUrl = provider.BaseUrl,
+            Model = provider.Model,
+            OllamaUrl = provider.OllamaUrl,
+            OllamaModel = provider.OllamaModel,
+            MaxTokens = provider.MaxTokens,
+            Temperature = provider.Temperature,
+            IsActive = provider.IsActive
+        };
+        _editDialogOpen = true;
+        _showEditApiKey = false;
     }
+
+    private void CancelEdit()
+    {
+        _editDialogOpen = false;
+    }
+
+    private async Task SaveProviderAsync()
+    {
+        _savingProvider = true;
+        try
+        {
+            if (_editingProvider.Id == 0)
+                await SettingsService.AddProviderAsync(_editingProvider);
+            else
+                await SettingsService.UpdateProviderAsync(_editingProvider);
+
+            _editDialogOpen = false;
+            await LoadDataAsync();
+        }
+        finally
+        {
+            _savingProvider = false;
+        }
+    }
+
+    private async Task DeleteProviderAsync(LlmProvider provider)
+    {
+        await SettingsService.DeleteProviderAsync(provider.Id);
+        await LoadDataAsync();
+    }
+
+    private async Task ActivateProviderAsync(LlmProvider provider)
+    {
+        await SettingsService.ActivateProviderAsync(provider.Id);
+        await LoadDataAsync();
+    }
+
+    // --- Generation settings ---
 
     private string GetActiveGenModeDisplay() => _genMode switch
     {
@@ -317,32 +509,6 @@
         "fake" => "Fake Sample",
         _ => "Unknown"
     };
-
-    private async Task SaveAsync()
-    {
-        _saving = true;
-        try
-        {
-            _llm.Temperature = Math.Round(_llm.TemperatureValue, 1);
-            await SettingsService.SaveLlmSettingsAsync(_llm);
-        }
-        finally
-        {
-            _saving = false;
-        }
-    }
-
-    private void OnGenModeChanged(string value)
-    {
-        _genMode = value;
-        _gen.Mode = value;
-        StateHasChanged();
-    }
-
-    private void ToggleMcpKeyVisibility()
-    {
-        _showMcpKey = !_showMcpKey;
-    }
 
     private async Task SaveGenAsync()
     {
@@ -354,6 +520,35 @@
         finally
         {
             _savingGen = false;
+        }
+    }
+
+    // --- Prompt settings ---
+
+    private async Task SavePromptsAsync()
+    {
+        _savingPrompts = true;
+        try
+        {
+            await SettingsService.SavePromptSettingsAsync(_prompts);
+        }
+        finally
+        {
+            _savingPrompts = false;
+        }
+    }
+
+    private async Task ResetPromptsAsync()
+    {
+        _savingPrompts = true;
+        try
+        {
+            await SettingsService.ResetPromptSettingsAsync();
+            _prompts = await SettingsService.GetPromptSettingsAsync();
+        }
+        finally
+        {
+            _savingPrompts = false;
         }
     }
 }

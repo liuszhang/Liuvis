@@ -1,0 +1,18 @@
+.model-item {
+    padding: 12px 16px;
+    margin: 4px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    background: transparent;
+    border: 1px solid transparent;
+}
+
+.model-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.model-item.selected {
+    background: rgba(0, 212, 255, 0.1);
+    border-color: rgba(0, 212, 255, 0.3);
+}

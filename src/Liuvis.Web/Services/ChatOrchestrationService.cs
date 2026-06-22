@@ -21,6 +21,7 @@ public class ChatOrchestrationService
     private readonly IModelGenerator _modelGenerator;
     private readonly IModificationEngine _modificationEngine;
     private readonly ILlmClient _llmClient;
+    private readonly ISettingsService _settingsService;
     private readonly IHubContext<DesignHub> _hub;
     private readonly ILogger<ChatOrchestrationService> _logger;
 
@@ -32,6 +33,7 @@ public class ChatOrchestrationService
         IModelGenerator modelGenerator,
         IModificationEngine modificationEngine,
         ILlmClient llmClient,
+        ISettingsService settingsService,
         IHubContext<DesignHub> hub,
         ILogger<ChatOrchestrationService> logger)
     {
@@ -42,6 +44,7 @@ public class ChatOrchestrationService
         _modelGenerator = modelGenerator;
         _modificationEngine = modificationEngine;
         _llmClient = llmClient;
+        _settingsService = settingsService;
         _hub = hub;
         _logger = logger;
     }
@@ -258,11 +261,11 @@ public class ChatOrchestrationService
         await NotifyProgress(sessionId, "Thinking...");
         try
         {
+            var prompts = await _settingsService.GetPromptSettingsAsync(ct);
             var thinkSb = new System.Text.StringBuilder();
             var reply = await _llmClient.CompleteWithThinkingAsync(
                 message,
-                "You are Liuvis AI, a 3D design assistant. Help the user design 3D models. " +
-                "You can create, modify, and query 3D models. Be concise and helpful.",
+                prompts.QueryPrompt,
                 onThinking: t => thinkSb.Append(t),
                 onToken: onResponseChunk,
                 cancellationToken: ct);
@@ -303,11 +306,11 @@ public class ChatOrchestrationService
         await NotifyProgress(sessionId, "I'm not sure what you mean...");
         try
         {
+            var prompts = await _settingsService.GetPromptSettingsAsync(ct);
             var thinkSb = new System.Text.StringBuilder();
             var reply = await _llmClient.CompleteWithThinkingAsync(
                 message,
-                "You are Liuvis AI, a 3D design assistant. The user's intent was unclear. " +
-                "Ask them to clarify whether they want to create, modify, or query a 3D model.",
+                prompts.UnknownPrompt,
                 onThinking: t => thinkSb.Append(t),
                 onToken: onResponseChunk,
                 cancellationToken: ct);

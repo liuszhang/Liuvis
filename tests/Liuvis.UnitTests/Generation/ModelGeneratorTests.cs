@@ -23,7 +23,10 @@ public class ModelGeneratorTests
             .ReturnsAsync("/storage/test.glb");
 
         var llmMock = new Mock<ILlmClient>();
-        var llmDesign = new LLMDesignService(llmMock.Object, NullLogger<LLMDesignService>.Instance);
+        var settingsMock = new Mock<ISettingsService>();
+        settingsMock.Setup(x => x.GetPromptSettingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptSettings());
+        var llmDesign = new LLMDesignService(llmMock.Object, settingsMock.Object, NullLogger<LLMDesignService>.Instance);
         var geoBuilder = new ProceduralGeometryBuilder(NullLogger<ProceduralGeometryBuilder>.Instance);
         var modelRepoMock = new Mock<ModelRepository>(new object[] { null! });
         modelRepoMock.Setup(x => x.CreateAsync(It.IsAny<Liuvis.Core.Entities.Model3D>(), It.IsAny<CancellationToken>()))

@@ -35,4 +35,19 @@ public class ModelRepository
             .OrderByDescending(m => m.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);
+
+    public virtual async Task<List<Model3D>> GetAllAsync(int limit = 100, CancellationToken ct = default)
+        => await _db.Models
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+    public virtual async Task<bool> DeleteAsync(Guid modelId, CancellationToken ct = default)
+    {
+        var model = await _db.Models.FindAsync([modelId], ct);
+        if (model is null) return false;
+        _db.Models.Remove(model);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
 }
