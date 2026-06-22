@@ -1,0 +1,29 @@
+@page "/test-viewer"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<h3>Test Viewer</h3>
+<div style="width:800px; height:600px; position:relative; border:2px solid red; background:blue">
+    <div id="@_containerId" style="position:absolute; inset:0; background:green"></div>
+</div>
+<button @onclick="LoadModel">Load Model</button>
+<p>Container ID: @_containerId</p>
+<p>Initialized: @_initialized</p>
+
+@code {
+    private IJSObjectReference? _module;
+    private string _containerId = $"test-{Guid.NewGuid():N}";
+    private bool _initialized;
+
+    private async Task LoadModel()
+    {
+        if (!_initialized)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/three-module.js");
+            await _module.InvokeVoidAsync("initScene", _containerId);
+            _initialized = true;
+        }
+        await _module!.InvokeVoidAsync("loadModel", "/storage/b9822233-9a29-4e32-8b67-383332ca8278.glb", true);
+    }
+
+    [Inject] IJSRuntime JS { get; set; } = default!;
+}

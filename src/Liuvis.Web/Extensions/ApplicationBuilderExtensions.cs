@@ -88,7 +88,35 @@ public static class ApplicationBuilderExtensions
         // ---------------------------------------------------------------------
         // 5. Static files
         // ---------------------------------------------------------------------
-        app.MapStaticAssets();
+        app.UseStaticFiles();
+
+        // Serve model files from data/models at /storage/
+        var storageBasePath = Path.GetFullPath(
+            app.Configuration.GetValue<string>("Storage:BasePath") ?? "./data/models");
+        Directory.CreateDirectory(storageBasePath);
+        app.Map("/storage/{**path}", async context =>
+        {
+            var relPath = context.Request.RouteValues["path"]?.ToString() ?? "";
+            var filePath = Path.Combine(storageBasePath, relPath);
+            if (File.Exists(filePath))
+            {
+                var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                var contentType = ext switch
+                {
+                    ".glb" => "model/gltf-binary",
+                    ".gltf" => "model/gltf+json",
+                    ".png" => "image/png",
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    _ => "application/octet-stream"
+                };
+                context.Response.ContentType = contentType;
+                await context.Response.SendFileAsync(filePath);
+            }
+            else
+            {
+                context.Response.StatusCode = 404;
+            }
+        });
 
         // ---------------------------------------------------------------------
         // 6. Controllers (REST API)

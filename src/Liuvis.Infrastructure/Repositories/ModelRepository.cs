@@ -38,6 +38,7 @@ public class ModelRepository
 
     public virtual async Task<List<Model3D>> GetAllAsync(int limit = 100, CancellationToken ct = default)
         => await _db.Models
+            .Include(m => m.Components)
             .OrderByDescending(m => m.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);

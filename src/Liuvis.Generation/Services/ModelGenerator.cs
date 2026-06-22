@@ -107,27 +107,21 @@ public class ModelGenerator : IModelGenerator
         return await _storage.DownloadAsync(model.FilePath, cancellationToken);
     }
 
-    private static byte[] GenerateSimpleGlb(Model3D model)
+    private byte[] GenerateSimpleGlb(Model3D model)
     {
-        using var ms = new MemoryStream();
-        ms.Write(System.Text.Encoding.ASCII.GetBytes("glTF"));
-        ms.Write(BitConverter.GetBytes((uint)2));
-        var lengthPos = ms.Position;
-        ms.Write(BitConverter.GetBytes((uint)0));
-
-        var json = @"{""asset"":{""version"":""2.0"",""generator"":""Liuvis""},""scene"":0,""scenes"":[{""nodes"":[0]}],""nodes"":[{""name"":""root""}],""meshes"":[]}";
-        var jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
-        var pad = (4 - (jsonBytes.Length % 4)) % 4;
-        var chunkLen = (uint)(jsonBytes.Length + pad);
-
-        ms.Write(BitConverter.GetBytes(chunkLen));
-        ms.Write(BitConverter.GetBytes((uint)0x4E4F534A));
-        ms.Write(jsonBytes);
-        for (int i = 0; i < pad; i++) ms.WriteByte(0x20);
-
-        var total = (uint)ms.Length;
-        ms.Seek(lengthPos, SeekOrigin.Begin);
-        ms.Write(BitConverter.GetBytes(total));
-        return ms.ToArray();
+        var fallbackScene = new SceneDescription
+        {
+            Objects = new List<SceneObject>
+            {
+                new()
+                {
+                    Type = "box",
+                    Size = new[] { 1.0, 1.0, 1.0 },
+                    Position = new[] { 0.0, 0.0, 0.0 },
+                    Color = "#00d4ff"
+                }
+            }
+        };
+        return _geometryBuilder.BuildGlb(fallbackScene);
     }
 }
