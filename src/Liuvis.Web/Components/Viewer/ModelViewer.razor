@@ -4,7 +4,8 @@
 <div id="@_jsContainerId" style="position:absolute;inset:0;background:#0a0e1a;
     background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),
     linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
-    background-size:40px 40px;overflow:hidden"></div>
+    background-size:40px 40px;overflow:hidden"
+    @oncontextmenu:preventDefault></div>
 
 @if (string.IsNullOrEmpty(ModelUrl) && string.IsNullOrEmpty(SceneData))
 {
