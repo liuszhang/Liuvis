@@ -105,6 +105,9 @@ public static class ApplicationBuilderExtensions
                 {
                     ".glb" => "model/gltf-binary",
                     ".gltf" => "model/gltf+json",
+                    ".stl" => "model/stl",
+                    ".step" or ".stp" => "application/step",
+                    ".obj" => "text/plain",
                     ".png" => "image/png",
                     ".jpg" or ".jpeg" => "image/jpeg",
                     _ => "application/octet-stream"

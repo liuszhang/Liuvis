@@ -125,6 +125,7 @@ public static class ServiceCollectionExtensions
         // -------------------------------------------------------------------------
         services.AddScoped<LLMDesignService>();
         services.AddScoped<ProceduralGeometryBuilder>();
+        services.AddScoped<StepExporter>();
 
         // -------------------------------------------------------------------------
         // Business Services (core module implementations)

@@ -2,10 +2,15 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 @inject ISessionManager SessionManager
 @inject ChatOrchestrationService ChatService
+@inject IModelGenerator ModelGenerator
 @inject IJSRuntime JS
 @inject ILogger<DesignStudio> Logger
 @inject DesignStudioState State
 @using Liuvis.Web.Components.Viewer
+@using Liuvis.Core.Enums
+@using Liuvis.Generation.Geometry
+@using Liuvis.Generation.Services
+@using Liuvis.Core.ValueObjects
 
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -68,6 +73,31 @@ else
     @* --- Right Preview Panel --- *@
     <div style="flex:1; position:relative">
         <ModelViewer ModelUrl="@(State.ModelUrl ?? "")" SceneData="@State.SceneData" />
+
+        @if (!string.IsNullOrEmpty(State.ModelUrl))
+        {
+            <div style="position:absolute; top:12px; right:12px; z-index:10; display:flex; align-items:center; gap:8px; background:rgba(13,17,23,0.85); padding:6px 10px; border-radius:6px; border:1px solid rgba(0,212,255,0.15)">
+                <MudSelect T="ModelFormat" @bind-Value="_downloadFormat" Variant="Variant.Outlined" Dense="true"
+                           Style="min-width:100px; font-size:12px">
+                    <MudSelectItem Value="ModelFormat.GLB">GLB</MudSelectItem>
+                    <MudSelectItem Value="ModelFormat.STL">STL</MudSelectItem>
+                    <MudSelectItem Value="ModelFormat.OBJ">OBJ</MudSelectItem>
+                    <MudSelectItem Value="ModelFormat.STEP">STEP</MudSelectItem>
+                </MudSelect>
+                <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small"
+                               Color="Color.Primary" OnClick="DownloadModelAsync" Title="Download" />
+            </div>
+        }
+
+        @if (_downloading)
+        {
+            <div style="position:absolute; top:12px; left:12px; z-index:20">
+                <MudChip T="string" Color="Color.Primary" Size="Size.Small">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Downloading...
+                </MudChip>
+            </div>
+        }
     </div>
 </div>
 }
@@ -82,6 +112,8 @@ else
 @code {
     private bool _isLoading = true;
     private CancellationTokenSource? _cts;
+    private ModelFormat _downloadFormat = ModelFormat.GLB;
+    private bool _downloading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -181,6 +213,7 @@ else
             if (result.Type is "model_ready" or "model_updated" && result.ModelId.HasValue)
             {
                 State.ModelUrl = $"/api/model/{result.ModelId}/download";
+                State.ModelId = result.ModelId;
 
                 if (result.Metadata != null && result.Metadata.TryGetValue("_scene", out var sceneVal))
                 {
@@ -198,6 +231,69 @@ else
         finally
         {
             State.Sending = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadModelAsync()
+    {
+        if (State.ModelId is not { } modelId) return;
+
+        _downloading = true;
+        StateHasChanged();
+        try
+        {
+            var model = await ModelGenerator.GetModel(modelId);
+            if (model == null) return;
+
+            byte[] data;
+            string ext;
+
+            if (_downloadFormat == model.Format)
+            {
+                var stream = await ModelGenerator.GetModelFile(modelId);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                data = ms.ToArray();
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(State.SceneData))
+                    throw new InvalidOperationException("No scene data available for format conversion.");
+
+                var scene = System.Text.Json.JsonSerializer.Deserialize<SceneDescription>(State.SceneData);
+                if (scene == null)
+                    throw new InvalidOperationException("Failed to deserialize scene data.");
+
+                data = _downloadFormat switch
+                {
+                    ModelFormat.STL => new ProceduralGeometryBuilder(
+                        Microsoft.Extensions.Logging.Abstractions.NullLogger<ProceduralGeometryBuilder>.Instance).BuildStl(scene),
+                    ModelFormat.OBJ => new ProceduralGeometryBuilder(
+                        Microsoft.Extensions.Logging.Abstractions.NullLogger<ProceduralGeometryBuilder>.Instance).BuildObj(scene),
+                    ModelFormat.STEP => new StepExporter().Export(scene),
+                    _ => new ProceduralGeometryBuilder(
+                        Microsoft.Extensions.Logging.Abstractions.NullLogger<ProceduralGeometryBuilder>.Instance).BuildGlb(scene)
+                };
+            }
+
+            ext = _downloadFormat switch
+            {
+                ModelFormat.STL => "stl",
+                ModelFormat.STEP => "step",
+                ModelFormat.OBJ => "obj",
+                _ => "glb"
+            };
+            using var dataRef = new DotNetStreamReference(new MemoryStream(data));
+            await JS.InvokeVoidAsync("downloadFileFromStream", $"{model.Name}.{ext}", dataRef);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Download failed for model {Id}", modelId);
+        }
+        finally
+        {
+            _downloading = false;
             StateHasChanged();
         }
     }

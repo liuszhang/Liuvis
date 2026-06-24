@@ -1,4 +1,5 @@
 using Liuvis.Core.DTOs.Responses;
+using Liuvis.Core.Enums;
 using Liuvis.Core.Exceptions;
 using Liuvis.Core.Interfaces;
 using Liuvis.Infrastructure.Repositories;
@@ -89,8 +90,19 @@ public class ModelController : ControllerBase
     {
         try
         {
+            var model = await _generator.GetModel(id);
+            if (model == null)
+                return NotFound(ApiResponse<ModelResponse>.Error(404, "Model not found."));
+
             var stream = await _generator.GetModelFile(id);
-            return File(stream, "model/gltf-binary", $"{id}.glb");
+            var (contentType, extension) = model.Format switch
+            {
+                ModelFormat.STL => ("model/stl", "stl"),
+                ModelFormat.STEP => ("application/step", "step"),
+                ModelFormat.OBJ => ("text/plain", "obj"),
+                _ => ("model/gltf-binary", "glb")
+            };
+            return File(stream, contentType, $"{model.Name}.{extension}");
         }
         catch (ModelNotFoundException)
         {

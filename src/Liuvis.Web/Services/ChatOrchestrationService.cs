@@ -52,6 +52,7 @@ public class ChatOrchestrationService
     public async Task<ChatResponse> ProcessMessageAsync(
         Guid sessionId,
         string message,
+        ModelFormat format = ModelFormat.GLB,
         Action<string>? onProgress = null,
         Action<string>? onThinkingChunk = null,
         Action<string>? onResponseChunk = null,
@@ -97,15 +98,15 @@ public class ChatOrchestrationService
 
         return intent.IntentType switch
         {
-            IntentType.Create => await HandleCreateAsync(sessionId, message, intent, onProgress, cancellationToken),
-            IntentType.Modify => await HandleModifyAsync(sessionId, intent, session, onProgress, cancellationToken),
+            IntentType.Create => await HandleCreateAsync(sessionId, message, intent, format, onProgress, cancellationToken),
+            IntentType.Modify => await HandleModifyAsync(sessionId, intent, session, format, onProgress, cancellationToken),
             IntentType.Query => await HandleQueryAsync(sessionId, message, onProgress, onResponseChunk, cancellationToken),
             _ => await HandleUnknownAsync(sessionId, message, onProgress, onResponseChunk, cancellationToken)
         };
     }
 
     private async Task<ChatResponse> HandleCreateAsync(
-        Guid sessionId, string message, IntentResult intent,
+        Guid sessionId, string message, IntentResult intent, ModelFormat format,
         Action<string>? onProgress, CancellationToken ct)
     {
         await NotifyProgress(sessionId, "Searching knowledge base for reusable components...");
@@ -116,7 +117,7 @@ public class ChatOrchestrationService
 
         await NotifyProgress(sessionId, "Building design specification...");
         var spec = await _designEngine.GenerateDesignSpec(plan, ct);
-        spec = spec with { SessionId = sessionId, Intent = intent };
+        spec = spec with { SessionId = sessionId, Intent = intent, Format = format };
 
         await NotifyProgress(sessionId, "Generating 3D geometry with AI...");
         var model = await _modelGenerator.GenerateModel(spec, ct);
@@ -155,7 +156,7 @@ public class ChatOrchestrationService
     }
 
     private async Task<ChatResponse> HandleModifyAsync(
-        Guid sessionId, IntentResult intent, Core.Entities.Session session,
+        Guid sessionId, IntentResult intent, Core.Entities.Session session, ModelFormat format,
         Action<string>? onProgress, CancellationToken ct)
     {
         if (session.CurrentModelId == null)
@@ -213,6 +214,7 @@ public class ChatOrchestrationService
             {
                 SessionId = sessionId,
                 Intent = intent,
+                Format = format,
                 Components = updatedModel.Components.Select(c => new ComponentSpec
                 {
                     Name = c.Name,

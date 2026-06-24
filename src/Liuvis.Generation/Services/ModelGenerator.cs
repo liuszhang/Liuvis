@@ -14,6 +14,7 @@ public class ModelGenerator : IModelGenerator
     private readonly IObjectStorageService _storage;
     private readonly LLMDesignService _llmDesign;
     private readonly ProceduralGeometryBuilder _geometryBuilder;
+    private readonly StepExporter _stepExporter;
     private readonly ModelRepository _modelRepository;
     private readonly ILogger<ModelGenerator> _logger;
 
@@ -21,27 +22,31 @@ public class ModelGenerator : IModelGenerator
         IObjectStorageService storage,
         LLMDesignService llmDesign,
         ProceduralGeometryBuilder geometryBuilder,
+        StepExporter stepExporter,
         ModelRepository modelRepository,
         ILogger<ModelGenerator> logger)
     {
         _storage = storage;
         _llmDesign = llmDesign;
         _geometryBuilder = geometryBuilder;
+        _stepExporter = stepExporter;
         _modelRepository = modelRepository;
         _logger = logger;
     }
 
     public async Task<Model3D> GenerateModel(DesignSpec spec, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Generating model: {ComponentCount} components from: {Description}",
-            spec.Components.Count, spec.Intent.OriginalText);
+        _logger.LogInformation("Generating model: {ComponentCount} components from: {Description}, Format: {Format}",
+            spec.Components.Count, spec.Intent.OriginalText, spec.Format);
 
         var model = new Model3D(
             $"Design_{DateTime.UtcNow:yyyyMMddHHmmss}",
             $"Generated from: {spec.Intent.OriginalText}",
-            ModelFormat.GLB);
+            spec.Format);
 
-        byte[] glbData;
+        byte[] modelData;
+        string contentType;
+        string extension;
 
         try
         {
@@ -49,7 +54,13 @@ public class ModelGenerator : IModelGenerator
 
             if (scene.Objects.Count > 0)
             {
-                glbData = _geometryBuilder.BuildGlb(scene);
+                modelData = spec.Format switch
+                {
+                    ModelFormat.STL => _geometryBuilder.BuildStl(scene),
+                    ModelFormat.STEP => _stepExporter.Export(scene),
+                    ModelFormat.OBJ => _geometryBuilder.BuildObj(scene),
+                    _ => _geometryBuilder.BuildGlb(scene)
+                };
 
                 var sceneJson = System.Text.Json.JsonSerializer.Serialize(scene,
                     new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
@@ -71,24 +82,44 @@ public class ModelGenerator : IModelGenerator
             else
             {
                 _logger.LogWarning("LLM returned empty scene, falling back to template geometry");
-                glbData = GenerateSimpleGlb(model);
+                modelData = spec.Format switch
+                {
+                    ModelFormat.STL => GenerateSimpleStl(),
+                    ModelFormat.STEP => GenerateSimpleStep(),
+                    ModelFormat.OBJ => GenerateSimpleObj(),
+                    _ => GenerateSimpleGlb()
+                };
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "LLM geometry generation failed, falling back to template");
-            glbData = GenerateSimpleGlb(model);
+            modelData = spec.Format switch
+            {
+                ModelFormat.STL => GenerateSimpleStl(),
+                ModelFormat.STEP => GenerateSimpleStep(),
+                ModelFormat.OBJ => GenerateSimpleObj(),
+                _ => GenerateSimpleGlb()
+            };
         }
 
-        var key = $"{model.ModelId}.glb";
-        using var stream = new MemoryStream(glbData);
-        var fileUrl = await _storage.UploadAsync(key, stream, "model/gltf-binary", cancellationToken);
+        (contentType, extension) = spec.Format switch
+        {
+            ModelFormat.STL => ("model/stl", "stl"),
+            ModelFormat.STEP => ("application/step", "step"),
+            ModelFormat.OBJ => ("text/plain", "obj"),
+            _ => ("model/gltf-binary", "glb")
+        };
+
+        var key = $"{model.ModelId}.{extension}";
+        using var stream = new MemoryStream(modelData);
+        var fileUrl = await _storage.UploadAsync(key, stream, contentType, cancellationToken);
         model.SetFilePath(key);
 
         await _modelRepository.CreateAsync(model, cancellationToken);
 
-        _logger.LogInformation("Model generated: {ModelId} ({ByteCount:n0} bytes) at {FilePath}",
-            model.ModelId, glbData.Length, key);
+        _logger.LogInformation("Model generated: {ModelId} ({Format}) ({ByteCount:n0} bytes) at {FilePath}",
+            model.ModelId, spec.Format, modelData.Length, key);
         return model;
     }
 
@@ -107,21 +138,22 @@ public class ModelGenerator : IModelGenerator
         return await _storage.DownloadAsync(model.FilePath, cancellationToken);
     }
 
-    private byte[] GenerateSimpleGlb(Model3D model)
+    private static SceneDescription CreateFallbackScene() => new()
     {
-        var fallbackScene = new SceneDescription
+        Objects = new List<SceneObject>
         {
-            Objects = new List<SceneObject>
+            new()
             {
-                new()
-                {
-                    Type = "box",
-                    Size = new[] { 1.0, 1.0, 1.0 },
-                    Position = new[] { 0.0, 0.0, 0.0 },
-                    Color = "#00d4ff"
-                }
+                Type = "box",
+                Size = new[] { 1.0, 1.0, 1.0 },
+                Position = new[] { 0.0, 0.0, 0.0 },
+                Color = "#00d4ff"
             }
-        };
-        return _geometryBuilder.BuildGlb(fallbackScene);
-    }
+        }
+    };
+
+    private byte[] GenerateSimpleGlb() => _geometryBuilder.BuildGlb(CreateFallbackScene());
+    private byte[] GenerateSimpleStl() => _geometryBuilder.BuildStl(CreateFallbackScene());
+    private byte[] GenerateSimpleStep() => _stepExporter.Export(CreateFallbackScene());
+    private byte[] GenerateSimpleObj() => _geometryBuilder.BuildObj(CreateFallbackScene());
 }

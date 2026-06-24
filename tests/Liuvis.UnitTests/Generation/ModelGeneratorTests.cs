@@ -28,11 +28,12 @@ public class ModelGeneratorTests
             .ReturnsAsync(new PromptSettings());
         var llmDesign = new LLMDesignService(llmMock.Object, settingsMock.Object, NullLogger<LLMDesignService>.Instance);
         var geoBuilder = new ProceduralGeometryBuilder(NullLogger<ProceduralGeometryBuilder>.Instance);
+        var stepExporter = new StepExporter();
         var modelRepoMock = new Mock<ModelRepository>(new object[] { null! });
         modelRepoMock.Setup(x => x.CreateAsync(It.IsAny<Liuvis.Core.Entities.Model3D>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Liuvis.Core.Entities.Model3D m, CancellationToken _) => m);
         var logger = NullLogger<ModelGenerator>.Instance;
-        var generator = new ModelGenerator(storageMock.Object, llmDesign, geoBuilder, modelRepoMock.Object, logger);
+        var generator = new ModelGenerator(storageMock.Object, llmDesign, geoBuilder, stepExporter, modelRepoMock.Object, logger);
 
         var spec = new DesignSpec
         {
