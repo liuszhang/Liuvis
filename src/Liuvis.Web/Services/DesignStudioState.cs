@@ -2,6 +2,7 @@ namespace Liuvis.Web.Services;
 
 using System;
 using System.Collections.Generic;
+using Liuvis.Core.Enums;
 
 /// <summary>
 /// 保存 Design Studio 页面状态，使其在路由切换（离开/返回）后不会重置。
@@ -25,9 +26,13 @@ public class DesignStudioState
 
     public string? ModelUrl { get; set; }
 
+    public Guid? ModelId { get; set; }
+
     public string? SceneData { get; set; }
 
     public bool Sending { get; set; }
+
+    public ModelFormat OutputFormat { get; set; } = ModelFormat.GLB;
 
     public List<ChatEntry> ChatHistory { get; set; } = new();
 
@@ -41,8 +46,10 @@ public class DesignStudioState
         StreamingResponse = "";
         Progress = "Thinking...";
         ModelUrl = null;
+        ModelId = null;
         SceneData = null;
         Sending = false;
+        OutputFormat = ModelFormat.GLB;
         ChatHistory.Clear();
     }
 

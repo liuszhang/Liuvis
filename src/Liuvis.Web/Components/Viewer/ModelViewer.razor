@@ -1,94 +1,80 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
-@* ---- Layer 1: Three.js canvas container (never touched by Blazor diff) ---- *@
-<div id="@_jsContainerId" class="js-canvas-host" style="position:absolute;inset:0"></div>
+<div id="@_jsContainerId" style="position:absolute;inset:0;background:#0a0e1a;
+    background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
+    background-size:40px 40px;overflow:hidden"
+    @oncontextmenu:preventDefault></div>
 
-@* ---- Layer 2: Blazor-managed placeholder overlay (removed when model loads) ---- *@
-@if (string.IsNullOrEmpty(ModelUrl))
+@if (string.IsNullOrEmpty(ModelUrl) && string.IsNullOrEmpty(SceneData))
 {
-    <div class="viewer-placeholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;pointer-events:none;background:#0a0e1a">
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;pointer-events:none;background:#0a0e1a">
         <MudIcon Icon="@Icons.Material.Filled.ViewInAr" Size="Size.Large" Color="Color.Secondary" />
         <MudText Typo="Typo.body1" Class="mud-text-secondary mt-4">3D Preview</MudText>
-        <MudText Typo="Typo.caption">Start a conversation to generate a model</MudText>
+        <MudText Typo="Typo.caption">Click a model to preview</MudText>
     </div>
 }
 
 @code {
     [Parameter] public string? ModelUrl { get; set; }
     [Parameter] public string? SceneData { get; set; }
-    [Parameter] public bool BloomEnabled { get; set; } = true;
 
     private IJSObjectReference? _module;
     private bool _initialized;
-    private string _jsContainerId = $"viewer-js-{Guid.NewGuid():N}";
-    private string? _loadedUrl;
-    private bool _sceneBuilt;
+    private string _jsContainerId = $"viewer-{Guid.NewGuid():N}";
+    private string? _lastUrl;
+    private string? _lastScene;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!RendererInfo.IsInteractive)
-            return;
+        if (!RendererInfo.IsInteractive) return;
 
-        if (firstRender)
+        if (firstRender && !_initialized)
         {
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/three-module.js");
-            await _module.InvokeVoidAsync("initScene", _jsContainerId);
-            await _module.InvokeVoidAsync("setBloomEnabled", BloomEnabled);
-            _initialized = true;
+            try
+            {
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", $"./js/three-module.js?v={DateTime.UtcNow.Ticks}");
+                await _module.InvokeVoidAsync("initScene", _jsContainerId);
+                _initialized = true;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ModelViewer] Init FAILED: {ex}");
+                return;
+            }
         }
 
-        if (_initialized && !string.IsNullOrEmpty(ModelUrl) && _module != null
-            && ModelUrl.StartsWith("/") && !ModelUrl.StartsWith("_")
-            && ModelUrl != _loadedUrl)
+        if (!_initialized || _module == null) return;
+
+        try
         {
-            _loadedUrl = ModelUrl;
-            await _module.InvokeVoidAsync("loadModel", ModelUrl);
+            if (!string.IsNullOrEmpty(SceneData) && SceneData != _lastScene)
+            {
+                _lastScene = SceneData;
+                _lastUrl = ModelUrl;
+                Console.WriteLine("[ModelViewer] Building from scene JSON");
+                await _module.InvokeVoidAsync("buildFromSceneDescription", SceneData);
+            }
+            else if (!string.IsNullOrEmpty(ModelUrl) && ModelUrl.StartsWith("/") && ModelUrl != _lastUrl)
+            {
+                _lastUrl = ModelUrl;
+                _lastScene = null;
+                Console.WriteLine($"[ModelViewer] Loading GLB: {ModelUrl}");
+                await _module.InvokeVoidAsync("loadModel", ModelUrl, true);
+            }
         }
-
-        if (_initialized && !string.IsNullOrEmpty(SceneData) && _module != null && !_sceneBuilt)
+        catch (Exception ex)
         {
-            _sceneBuilt = true;
-            await _module.InvokeVoidAsync("buildFromSceneDescription", SceneData);
+            Console.Error.WriteLine($"[ModelViewer] Load FAILED: {ex}");
         }
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        if (SceneData != _lastSceneData)
-        {
-            _sceneBuilt = false;
-            _lastSceneData = SceneData;
-        }
-    }
-
-    private string? _lastSceneData;
-
-    public async Task HighlightComponent(string componentId)
-    {
-        if (_module != null)
-            await _module.InvokeVoidAsync("highlightComponent", componentId);
-    }
-
-    public async Task UpdateComponentColor(string componentId, string colorHex)
-    {
-        if (_module != null)
-            await _module.InvokeVoidAsync("updateComponentColor", componentId, colorHex);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_module != null)
         {
-            try
-            {
-                await _module.InvokeVoidAsync("dispose");
-                await _module.DisposeAsync();
-            }
-            catch (JSDisconnectedException)
-            {
-                // Circuit disconnected — JS runtime is already gone, safe to ignore
-            }
+            try { await _module.DisposeAsync(); } catch { }
         }
     }
 }

@@ -15,8 +15,8 @@
         <NavMenu />
     </MudDrawer>
 
-    <MudMainContent Class="pa-0">
-        <MudContainer MaxWidth="MaxWidth.False" Class="ma-0 pa-0" Style="height: calc(100vh - 64px);">
+    <MudMainContent Style="overflow:visible !important;">
+        <MudContainer MaxWidth="MaxWidth.False" Class="ma-0 pa-0" Style="height: calc(100vh - 64px); overflow-y: auto;">
             @Body
         </MudContainer>
     </MudMainContent>

@@ -21,6 +21,7 @@ public class ChatOrchestrationService
     private readonly IModelGenerator _modelGenerator;
     private readonly IModificationEngine _modificationEngine;
     private readonly ILlmClient _llmClient;
+    private readonly ISettingsService _settingsService;
     private readonly IHubContext<DesignHub> _hub;
     private readonly ILogger<ChatOrchestrationService> _logger;
 
@@ -32,6 +33,7 @@ public class ChatOrchestrationService
         IModelGenerator modelGenerator,
         IModificationEngine modificationEngine,
         ILlmClient llmClient,
+        ISettingsService settingsService,
         IHubContext<DesignHub> hub,
         ILogger<ChatOrchestrationService> logger)
     {
@@ -42,6 +44,7 @@ public class ChatOrchestrationService
         _modelGenerator = modelGenerator;
         _modificationEngine = modificationEngine;
         _llmClient = llmClient;
+        _settingsService = settingsService;
         _hub = hub;
         _logger = logger;
     }
@@ -49,6 +52,7 @@ public class ChatOrchestrationService
     public async Task<ChatResponse> ProcessMessageAsync(
         Guid sessionId,
         string message,
+        ModelFormat format = ModelFormat.GLB,
         Action<string>? onProgress = null,
         Action<string>? onThinkingChunk = null,
         Action<string>? onResponseChunk = null,
@@ -94,15 +98,15 @@ public class ChatOrchestrationService
 
         return intent.IntentType switch
         {
-            IntentType.Create => await HandleCreateAsync(sessionId, message, intent, onProgress, cancellationToken),
-            IntentType.Modify => await HandleModifyAsync(sessionId, intent, session, onProgress, cancellationToken),
+            IntentType.Create => await HandleCreateAsync(sessionId, message, intent, format, onProgress, cancellationToken),
+            IntentType.Modify => await HandleModifyAsync(sessionId, intent, session, format, onProgress, cancellationToken),
             IntentType.Query => await HandleQueryAsync(sessionId, message, onProgress, onResponseChunk, cancellationToken),
             _ => await HandleUnknownAsync(sessionId, message, onProgress, onResponseChunk, cancellationToken)
         };
     }
 
     private async Task<ChatResponse> HandleCreateAsync(
-        Guid sessionId, string message, IntentResult intent,
+        Guid sessionId, string message, IntentResult intent, ModelFormat format,
         Action<string>? onProgress, CancellationToken ct)
     {
         await NotifyProgress(sessionId, "Searching knowledge base for reusable components...");
@@ -113,7 +117,7 @@ public class ChatOrchestrationService
 
         await NotifyProgress(sessionId, "Building design specification...");
         var spec = await _designEngine.GenerateDesignSpec(plan, ct);
-        spec = spec with { SessionId = sessionId, Intent = intent };
+        spec = spec with { SessionId = sessionId, Intent = intent, Format = format };
 
         await NotifyProgress(sessionId, "Generating 3D geometry with AI...");
         var model = await _modelGenerator.GenerateModel(spec, ct);
@@ -152,7 +156,7 @@ public class ChatOrchestrationService
     }
 
     private async Task<ChatResponse> HandleModifyAsync(
-        Guid sessionId, IntentResult intent, Core.Entities.Session session,
+        Guid sessionId, IntentResult intent, Core.Entities.Session session, ModelFormat format,
         Action<string>? onProgress, CancellationToken ct)
     {
         if (session.CurrentModelId == null)
@@ -210,6 +214,7 @@ public class ChatOrchestrationService
             {
                 SessionId = sessionId,
                 Intent = intent,
+                Format = format,
                 Components = updatedModel.Components.Select(c => new ComponentSpec
                 {
                     Name = c.Name,
@@ -258,11 +263,11 @@ public class ChatOrchestrationService
         await NotifyProgress(sessionId, "Thinking...");
         try
         {
+            var prompts = await _settingsService.GetPromptSettingsAsync(ct);
             var thinkSb = new System.Text.StringBuilder();
             var reply = await _llmClient.CompleteWithThinkingAsync(
                 message,
-                "You are Liuvis AI, a 3D design assistant. Help the user design 3D models. " +
-                "You can create, modify, and query 3D models. Be concise and helpful.",
+                prompts.QueryPrompt,
                 onThinking: t => thinkSb.Append(t),
                 onToken: onResponseChunk,
                 cancellationToken: ct);
@@ -303,11 +308,11 @@ public class ChatOrchestrationService
         await NotifyProgress(sessionId, "I'm not sure what you mean...");
         try
         {
+            var prompts = await _settingsService.GetPromptSettingsAsync(ct);
             var thinkSb = new System.Text.StringBuilder();
             var reply = await _llmClient.CompleteWithThinkingAsync(
                 message,
-                "You are Liuvis AI, a 3D design assistant. The user's intent was unclear. " +
-                "Ask them to clarify whether they want to create, modify, or query a 3D model.",
+                prompts.UnknownPrompt,
                 onThinking: t => thinkSb.Append(t),
                 onToken: onResponseChunk,
                 cancellationToken: ct);

@@ -10,14 +10,18 @@ namespace Liuvis.UnitTests.NLU;
 public class NluServiceTests
 {
     private readonly Mock<ILlmClient> _llmMock;
+    private readonly Mock<ISettingsService> _settingsMock;
     private readonly Mock<ILogger<NluService>> _loggerMock;
     private readonly NluService _sut;
 
     public NluServiceTests()
     {
         _llmMock = new Mock<ILlmClient>();
+        _settingsMock = new Mock<ISettingsService>();
+        _settingsMock.Setup(x => x.GetPromptSettingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptSettings());
         _loggerMock = new Mock<ILogger<NluService>>();
-        _sut = new NluService(_llmMock.Object, _loggerMock.Object);
+        _sut = new NluService(_llmMock.Object, _settingsMock.Object, _loggerMock.Object);
     }
 
     [Fact]

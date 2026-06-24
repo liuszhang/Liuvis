@@ -14,6 +14,7 @@ public class LiuvisDbContext : DbContext
     public DbSet<KnowledgeEntry> KnowledgeEntries => Set<KnowledgeEntry>();
     public DbSet<DesignSnapshot> DesignSnapshots => Set<DesignSnapshot>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
 
     public LiuvisDbContext(DbContextOptions<LiuvisDbContext> options) : base(options)
     {
@@ -92,6 +93,15 @@ public class LiuvisDbContext : DbContext
             entity.Property(e => e.Key).HasMaxLength(128);
             entity.Property(e => e.Value).HasMaxLength(4096);
             entity.Property(e => e.Description).HasMaxLength(256);
+        });
+
+        // LlmProvider
+        modelBuilder.Entity<LlmProvider>(entity =>
+        {
+            entity.ToTable("llm_providers");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.Provider).IsRequired().HasMaxLength(32);
         });
     }
 }

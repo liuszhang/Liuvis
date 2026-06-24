@@ -1,4 +1,320 @@
 @page "/models"
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
+@inject ModelRepository ModelRepo
+@inject IObjectStorageService Storage
+@inject IModelGenerator ModelGenerator
+@inject IJSRuntime JS
+@inject IDialogService DialogService
+@inject ILogger<Models> Logger
+@using Liuvis.Web.Components.Viewer
+@using Liuvis.Infrastructure.Repositories
+@using Liuvis.Core.Interfaces
+@using Liuvis.Core.Enums
+@using Liuvis.Generation.Geometry
+@using Liuvis.Generation.Services
+@using Liuvis.Core.ValueObjects
 
-<MudText Typo="Typo.h4" Class="pa-4">My Models</MudText>
-<MudText Typo="Typo.body1" Class="px-4 mud-text-secondary">Your generated 3D models will appear here.</MudText>
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+
+<div style="display:flex; height:calc(100vh - 64px); overflow:hidden">
+    @* --- Left Panel: Model List --- *@
+    <div style="width:360px; min-width:360px; border-right:1px solid rgba(0,212,255,0.15); display:flex; flex-direction:column; background:#0d1117">
+        <div style="padding:16px 20px; border-bottom:1px solid rgba(0,212,255,0.1)">
+            <MudText Typo="Typo.h6" Style="color:#00d4ff">My Models</MudText>
+            <MudTextField @bind-Value="_searchKeyword"
+                          Placeholder="Search models..."
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Style="margin-top:8px; font-size:13px"
+                          Class="model-search" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="margin-top:4px">
+                @FilteredModels.Count of @_models.Count model(s)
+            </MudText>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; padding:8px">
+            @if (FilteredModels.Count == 0 && !_isLoading)
+            {
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#94a3b8">
+                    <MudIcon Icon="@Icons.Material.Filled.ViewInAr" Size="Size.Large" Style="font-size:48px; opacity:0.3" />
+                    <MudText Typo="Typo.body2" Class="mt-4">
+                        @(_models.Count == 0 ? "No models yet" : "No matching models")
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                        @(_models.Count == 0 ? "Generate models in the Design Studio" : "Try a different search keyword")
+                    </MudText>
+                </div>
+            }
+            else
+            {
+                @foreach (var model in FilteredModels)
+                {
+                    var isSelected = _selectedModel?.ModelId == model.ModelId;
+                    <div @onclick="() => SelectModelAsync(model)"
+                         class="model-item @(isSelected ? "selected" : "")">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.ViewInAr"
+                                     Color="@(isSelected ? Color.Primary : Color.Default)"
+                                     Size="Size.Small" />
+                            <div style="flex:1; min-width:0">
+                                <MudText Typo="Typo.body2" Style="color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+                                    @model.Name
+                                </MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @model.CreatedAt.ToString("yyyy-MM-dd HH:mm") · @model.Format · @model.ComponentCount components
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    @* --- Right Panel: Preview + Actions --- *@
+    <div style="flex:1; display:flex; flex-direction:column; background:#0a0e1a; position:relative">
+        @if (_selectedModel is not null)
+        {
+            @* --- Model Info Bar --- *@
+            <div style="padding:12px 20px; border-bottom:1px solid rgba(0,212,255,0.1); display:flex; align-items:center; gap:12px; background:#0d1117; z-index:5; position:relative">
+                <MudIcon Icon="@Icons.Material.Filled.ViewInAr" Color="Color.Primary" />
+                <div style="flex:1">
+                    <MudText Typo="Typo.subtitle1" Style="color:#e2e8f0">@_selectedModel.Name</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @_selectedModel.ComponentCount components · v@_selectedModel.Version · @_selectedModel.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                    </MudText>
+                </div>
+
+                <MudSelect T="ModelFormat" @bind-Value="_downloadFormat" Variant="Variant.Outlined" Dense="true"
+                           Style="min-width:130px; font-size:12px">
+                    <MudSelectItem Value="ModelFormat.GLB">GLB</MudSelectItem>
+                    <MudSelectItem Value="ModelFormat.STL">STL</MudSelectItem>
+                    <MudSelectItem Value="ModelFormat.OBJ">OBJ</MudSelectItem>
+                    <MudSelectItem Value="ModelFormat.STEP">STEP</MudSelectItem>
+                </MudSelect>
+
+                <MudButton Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small"
+                           OnClick="DownloadModelAsync"
+                           StartIcon="@Icons.Material.Filled.Download">
+                    Download
+                </MudButton>
+                <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small"
+                           OnClick="() => ConfirmDeleteAsync()"
+                           StartIcon="@Icons.Material.Filled.Delete">
+                    Delete
+                </MudButton>
+            </div>
+        }
+
+        @* --- 3D Viewer (always rendered) --- *@
+        <div style="flex:1; position:relative; min-height:0; overflow:visible; z-index:0">
+            <ModelViewer ModelUrl="@_modelUrl" SceneData="@_sceneJson" />
+
+            @if (_selectedModel is not null && _downloading)
+            {
+                <div style="position:absolute; top:16px; right:16px; z-index:20">
+                    <MudChip T="string" Color="Color.Primary" Size="Size.Small">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        Downloading...
+                    </MudChip>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ModelListItem> _models = new();
+    private ModelListItem? _selectedModel;
+    private bool _isLoading = true;
+    private string? _modelUrl;
+    private string? _sceneJson;
+    private bool _downloading;
+    private string _searchKeyword = "";
+    private ModelFormat _downloadFormat = ModelFormat.GLB;
+
+    private List<ModelListItem> FilteredModels => string.IsNullOrWhiteSpace(_searchKeyword)
+        ? _models
+        : _models.Where(m =>
+            m.Name.Contains(_searchKeyword, StringComparison.OrdinalIgnoreCase) ||
+            m.Description.Contains(_searchKeyword, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!RendererInfo.IsInteractive) return;
+        await LoadModelsAsync();
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var dbModels = await ModelRepo.GetAllAsync(200);
+            Logger.LogInformation("[Models] Loaded {Count} models, first has {MetaCount} metadata keys", dbModels.Count, dbModels.FirstOrDefault()?.Metadata?.Count ?? 0);
+            _models = dbModels.Select(m => new ModelListItem
+            {
+                ModelId = m.ModelId,
+                Name = m.Name,
+                Description = m.Description,
+                Format = m.Format,
+                ComponentCount = m.Components.Count,
+                Version = m.Version,
+                CreatedAt = m.CreatedAt,
+                FileUrl = $"/storage/{m.FilePath}",
+                SceneJson = m.Metadata.TryGetValue("_scene", out var scene) ? scene : null
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load models");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void SelectModelAsync(ModelListItem model)
+    {
+        Logger.LogInformation("[Models] SelectModel: {Name}, FileUrl={Url}, SceneJson={Scene}", model.Name, model.FileUrl, model.SceneJson?[..Math.Min(50, model.SceneJson?.Length ?? 0)]);
+        _selectedModel = model;
+        _modelUrl = model.FileUrl;
+        _sceneJson = model.SceneJson;
+        _downloadFormat = model.Format;
+        StateHasChanged();
+    }
+
+    private async Task DownloadModelAsync()
+    {
+        if (_selectedModel is null) return;
+
+        _downloading = true;
+        StateHasChanged();
+        try
+        {
+            byte[] data;
+            string ext;
+
+            if (_downloadFormat == _selectedModel.Format)
+            {
+                var stream = await ModelGenerator.GetModelFile(_selectedModel.ModelId);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                data = ms.ToArray();
+            }
+            else
+            {
+                data = await ConvertModelAsync(_selectedModel, _downloadFormat);
+            }
+
+            ext = _downloadFormat switch
+            {
+                ModelFormat.STL => "stl",
+                ModelFormat.STEP => "step",
+                ModelFormat.OBJ => "obj",
+                _ => "glb"
+            };
+            using var dataRef = new DotNetStreamReference(new MemoryStream(data));
+            await JS.InvokeVoidAsync("downloadFileFromStream", $"{_selectedModel.Name}.{ext}", dataRef);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Download failed for model {Id}", _selectedModel.ModelId);
+        }
+        finally
+        {
+            _downloading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<byte[]> ConvertModelAsync(ModelListItem model, ModelFormat targetFormat)
+    {
+        if (string.IsNullOrEmpty(model.SceneJson))
+            throw new InvalidOperationException("Model has no scene data for format conversion.");
+
+        var scene = System.Text.Json.JsonSerializer.Deserialize<SceneDescription>(model.SceneJson);
+        if (scene == null)
+            throw new InvalidOperationException("Failed to deserialize scene data.");
+
+        return targetFormat switch
+        {
+            ModelFormat.STL => new ProceduralGeometryBuilder(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ProceduralGeometryBuilder>.Instance).BuildStl(scene),
+            ModelFormat.OBJ => new ProceduralGeometryBuilder(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ProceduralGeometryBuilder>.Instance).BuildObj(scene),
+            ModelFormat.STEP => new StepExporter().Export(scene),
+            _ => new ProceduralGeometryBuilder(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ProceduralGeometryBuilder>.Instance).BuildGlb(scene)
+        };
+    }
+
+    private async Task ConfirmDeleteAsync(ModelListItem? target = null)
+    {
+        target ??= _selectedModel;
+        if (target is null) return;
+
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Model",
+            $"Are you sure you want to delete \"{target.Name}\"?",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            await DeleteModelAsync(target);
+        }
+    }
+
+    private async Task DeleteModelAsync(ModelListItem? target = null)
+    {
+        target ??= _selectedModel;
+        if (target is null) return;
+
+        try
+        {
+            var model = await ModelGenerator.GetModel(target.ModelId);
+            if (model != null && !string.IsNullOrEmpty(model.FilePath))
+            {
+                try { await Storage.DeleteAsync(model.FilePath); }
+                catch (Exception ex) { Logger.LogWarning(ex, "Failed to delete storage file"); }
+            }
+            await ModelRepo.DeleteAsync(target.ModelId);
+            _models.RemoveAll(m => m.ModelId == target.ModelId);
+            if (_selectedModel?.ModelId == target.ModelId)
+            {
+                _selectedModel = null;
+                _modelUrl = null;
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Delete failed for model {Id}", target.ModelId);
+        }
+    }
+
+    private class ModelListItem
+    {
+        public Guid ModelId { get; set; }
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public ModelFormat Format { get; set; }
+        public int ComponentCount { get; set; }
+        public int Version { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string FileUrl { get; set; } = "";
+        public string? SceneJson { get; set; }
+    }
+}
