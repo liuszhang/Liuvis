@@ -1,6 +1,8 @@
 @page "/settings"
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 @inject ISettingsService SettingsService
+@inject IObjectStorageService Storage
+@inject IJSRuntime JS
 @inject ILogger<Settings> Logger
 
 <MudDialogProvider />
@@ -378,6 +380,86 @@
             </MudCardActions>
         </MudCard>
     </MudTabPanel>
+
+    <MudTabPanel Text="工具与技能">
+        <MudCard Elevation="0" Class="mt-4">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Class="mb-4">MCP Servers</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                    Configure Model Context Protocol servers for external tool integration.
+                </MudText>
+
+                @foreach (var server in _toolsSettings.McpServers)
+                {
+                    <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; margin-bottom:8px; background:rgba(17,24,39,0.6); border:1px solid rgba(0,212,255,0.1); border-radius:6px">
+                        <MudSwitch @bind-Value="server.IsEnabled" Color="Color.Primary" Size="Size.Small" />
+                        <MudTextField @bind-Value="server.Name" Label="Name" Variant="Variant.Outlined" Dense="true" Style="flex:1; min-width:120px" />
+                        <MudTextField @bind-Value="server.ServerUrl" Label="Server URL" Variant="Variant.Outlined" Dense="true" Style="flex:1.5; min-width:180px"
+                                      Placeholder="http://localhost:8080" />
+                        <MudTextField @bind-Value="server.Description" Label="Description" Variant="Variant.Outlined" Dense="true" Style="flex:1; min-width:100px" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => RemoveMcpServer(server))" Title="Remove" />
+                    </div>
+                }
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           OnClick="AddMcpServer" StartIcon="@Icons.Material.Filled.Add">
+                    Add MCP Server
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+
+        <MudCard Elevation="0" Class="mt-4">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Class="mb-4">Skills</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                    Upload skill files (documents, prompts, reference data) to extend AI capabilities.
+                </MudText>
+
+                @foreach (var skill in _toolsSettings.Skills)
+                {
+                    <MudPaper Class="pa-4 mb-3" Style="background:rgba(17,24,39,0.6); border:1px solid rgba(0,212,255,0.1)">
+                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px">
+                            <MudSwitch @bind-Value="skill.IsEnabled" Color="Color.Primary" Size="Size.Small" />
+                            <MudTextField @bind-Value="skill.Name" Label="Name" Variant="Variant.Outlined" Dense="true" Style="flex:1" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => RemoveSkill(skill))" Title="Remove" />
+                        </div>
+                        <MudTextField @bind-Value="skill.Description" Label="Description" Variant="Variant.Outlined" Dense="true" Class="mb-2" />
+                        @if (!string.IsNullOrEmpty(skill.FileName))
+                        {
+                            <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(0,212,255,0.05); border-radius:4px; margin-bottom:8px">
+                                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2" Style="color:#e2e8f0; flex:1">@skill.FileName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@(FormatFileSize(skill.FileSize))</MudText>
+                            </div>
+                        }
+                        <label for="@($"skillFileInput-{skill.Id}")"
+                               style="display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border:1px solid rgba(0,212,255,0.5); border-radius:4px; color:#00d4ff; font-size:12px; cursor:pointer; pointer-events:auto">
+                            <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /> Upload File
+                        </label>
+                        <InputFile id="@($"skillFileInput-{skill.Id}")" OnChange="@((InputFileChangeEventArgs e) => HandleSkillFileUpload(skill, e))"
+                                   style="display:none" />
+                    </MudPaper>
+                }
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           OnClick="AddSkill" StartIcon="@Icons.Material.Filled.Add">
+                    Add Skill
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+
+        <MudCardActions Class="pa-4">
+            <MudSpacer />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       OnClick="SaveToolsAsync" Disabled="_savingTools"
+                       StartIcon="@Icons.Material.Filled.Save">
+                @if (_savingTools) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                Save Configuration
+            </MudButton>
+        </MudCardActions>
+    </MudTabPanel>
 </MudTabs>
 
 @code {
@@ -398,6 +480,10 @@
 
     private PromptSettings _prompts = new();
     private bool _savingPrompts;
+
+    private ToolsSettings _toolsSettings = new();
+    private bool _savingTools;
+    private string _skillFileInput = "skillFileInput";
 
     protected override async Task OnInitializedAsync()
     {
@@ -423,6 +509,8 @@
             _genMode = _gen.Mode;
 
             _prompts = await SettingsService.GetPromptSettingsAsync();
+
+            _toolsSettings = await SettingsService.GetToolsSettingsAsync();
         }
         catch (Exception ex)
         {
@@ -550,5 +638,80 @@
         {
             _savingPrompts = false;
         }
+    }
+
+    // --- Tools & Skills ---
+
+    private void AddMcpServer()
+    {
+        _toolsSettings.McpServers.Add(new McpServerConfig { Name = "New Server", IsEnabled = true });
+    }
+
+    private void RemoveMcpServer(McpServerConfig server)
+    {
+        _toolsSettings.McpServers.Remove(server);
+    }
+
+    private void AddSkill()
+    {
+        _toolsSettings.Skills.Add(new SkillConfig { Name = "New Skill", IsEnabled = true });
+    }
+
+    private void RemoveSkill(SkillConfig skill)
+    {
+        if (!string.IsNullOrEmpty(skill.FilePath))
+        {
+            _ = Storage.DeleteAsync(skill.FilePath);
+        }
+        _toolsSettings.Skills.Remove(skill);
+    }
+
+    private async Task HandleSkillFileUpload(SkillConfig skill, InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size == 0) return;
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            var key = $"skills/{skill.Id}/{file.Name}";
+            await Storage.UploadAsync(key, stream, file.ContentType);
+
+            skill.FilePath = key;
+            skill.FileName = file.Name;
+            skill.FileSize = file.Size;
+
+            if (string.IsNullOrWhiteSpace(skill.Name) || skill.Name == "New Skill")
+                skill.Name = System.IO.Path.GetFileNameWithoutExtension(file.Name);
+
+            Logger.LogInformation("[Settings] Skill file uploaded: {Name} ({Size} bytes)", file.Name, file.Size);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to upload skill file");
+        }
+    }
+
+    private async Task SaveToolsAsync()
+    {
+        _savingTools = true;
+        try
+        {
+            await SettingsService.SaveToolsSettingsAsync(_toolsSettings);
+        }
+        finally
+        {
+            _savingTools = false;
+        }
+    }
+
+    private static string FormatFileSize(long? bytes)
+    {
+        if (bytes is null or 0) return "0 B";
+        var units = new[] { "B", "KB", "MB", "GB" };
+        var idx = 0;
+        var size = (double)bytes.Value;
+        while (size >= 1024 && idx < units.Length - 1) { size /= 1024; idx++; }
+        return $"{size:F1} {units[idx]}";
     }
 }

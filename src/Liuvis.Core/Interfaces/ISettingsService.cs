@@ -22,6 +22,10 @@ public interface ISettingsService
     Task<PromptSettings> GetPromptSettingsAsync(CancellationToken ct = default);
     Task SavePromptSettingsAsync(PromptSettings settings, CancellationToken ct = default);
     Task ResetPromptSettingsAsync(CancellationToken ct = default);
+
+    // Tools & Skills management
+    Task<ToolsSettings> GetToolsSettingsAsync(CancellationToken ct = default);
+    Task SaveToolsSettingsAsync(ToolsSettings settings, CancellationToken ct = default);
 }
 
 public class LlmSettings

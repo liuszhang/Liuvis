@@ -362,6 +362,59 @@ public class SettingsService : ISettingsService
         await SavePromptSettingsAsync(defaults, ct);
     }
 
+    // --- Tools & Skills management ---
+
+    private const string ToolsSettingsKey = "tools_settings";
+    private static ToolsSettings? _cachedToolsSettings;
+
+    public Task<ToolsSettings> GetToolsSettingsAsync(CancellationToken ct = default)
+    {
+        lock (_cacheLock)
+        {
+            if (_cachedToolsSettings is not null)
+                return Task.FromResult(_cachedToolsSettings);
+        }
+        return LoadToolsSettingsFromDbAsync(ct);
+    }
+
+    private async Task<ToolsSettings> LoadToolsSettingsFromDbAsync(CancellationToken ct)
+    {
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
+        var entity = await db.AppSettings.FindAsync([ToolsSettingsKey], ct);
+
+        if (entity?.Value is null)
+        {
+            var defaults = new ToolsSettings();
+            lock (_cacheLock) { _cachedToolsSettings = defaults; }
+            return defaults;
+        }
+
+        try
+        {
+            var settings = JsonSerializer.Deserialize<ToolsSettings>(entity.Value,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new ToolsSettings();
+            lock (_cacheLock) { _cachedToolsSettings = settings; }
+            return settings;
+        }
+        catch
+        {
+            var fallback = new ToolsSettings();
+            lock (_cacheLock) { _cachedToolsSettings = fallback; }
+            return fallback;
+        }
+    }
+
+    public async Task SaveToolsSettingsAsync(ToolsSettings settings, CancellationToken ct = default)
+    {
+        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+        await SaveSettingValueAsync(ToolsSettingsKey, "MCP Servers and Skills configuration", json, ct);
+        lock (_cacheLock) { _cachedToolsSettings = settings; }
+    }
+
     // --- Legacy helpers for GenerationSettings (still uses app_settings) ---
 
     private async Task<T> LoadFromDbAsync<T>(string key, CancellationToken ct) where T : new()
