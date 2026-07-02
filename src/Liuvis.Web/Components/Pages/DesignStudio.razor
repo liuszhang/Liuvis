@@ -4,13 +4,18 @@
 @inject ChatOrchestrationService ChatService
 @inject IModelGenerator ModelGenerator
 @inject IJSRuntime JS
+@inject IHttpClientFactory HttpClientFactory
 @inject ILogger<DesignStudio> Logger
 @inject DesignStudioState State
+@inject NavigationManager Navigation
 @using Liuvis.Web.Components.Viewer
+@using Liuvis.Web.Components.Sidebar
 @using Liuvis.Core.Enums
 @using Liuvis.Generation.Geometry
 @using Liuvis.Generation.Services
 @using Liuvis.Core.ValueObjects
+@using Liuvis.Core.DTOs.Responses
+@using Microsoft.AspNetCore.Components.Forms
 
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -26,53 +31,124 @@
 else
 {
 <div style="display:flex; height:calc(100vh - 120px); background:#0a0e1a; color:#e2e8f0">
-    @* --- Left Chat Panel --- *@
-    <div style="width:400px; padding:24px; border-right:1px solid rgba(0,212,255,0.2); display:flex; flex-direction:column">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px">
-            <h3 style="color:#00d4ff; margin:0">Design Assistant</h3>
-            <button @onclick="NewChat" disabled="@State.Sending"
-                style="padding:6px 16px; background:transparent; color:#94a3b8; border:1px solid rgba(148,163,184,0.3); border-radius:4px; cursor:pointer; font-weight:500; font-size:12px">
-                New
+    @* --- Left Panel with Tabs: Chat | Components --- *@
+    <div style="width:400px; border-right:1px solid rgba(0,212,255,0.2); display:flex; flex-direction:column">
+
+        @* Tab bar *@
+        <div style="display:flex; border-bottom:1px solid rgba(0,212,255,0.15)">
+            <button @onclick="() => _activeTab = 0"
+                style="flex:1; padding:10px; background:@(_activeTab == 0 ? "rgba(0,212,255,0.12)" : "transparent"); color:@(_activeTab == 0 ? "#00d4ff" : "#64748b"); border:none; border-bottom:2px solid @(_activeTab == 0 ? "#00d4ff" : "transparent"); cursor:pointer; font-weight:500; font-size:13px; transition:all 0.2s">
+                Chat
+            </button>
+            <button @onclick="() => _activeTab = 1"
+                style="flex:1; padding:10px; background:@(_activeTab == 1 ? "rgba(0,212,255,0.12)" : "transparent"); color:@(_activeTab == 1 ? "#00d4ff" : "#64748b"); border:none; border-bottom:2px solid @(_activeTab == 1 ? "#00d4ff" : "transparent"); cursor:pointer; font-weight:500; font-size:13px; transition:all 0.2s">
+                Components
+                @if (State.Components.Count > 0)
+                {
+                    <span style="margin-left:6px; padding:1px 7px; background:#00d4ff; color:#0a0e1a; border-radius:10px; font-size:11px; font-weight:bold">@State.Components.Count</span>
+                }
             </button>
         </div>
-        <input @bind="State.ChatInput" @bind:event="oninput"
-            @onkeyup="HandleKeyUp"
-            style="width:100%; padding:12px; background:#111827; border:1px solid rgba(0,212,255,0.3); color:#e2e8f0; border-radius:4px; font-size:14px"
-            placeholder="Describe your 3D idea, e.g. Create a blue cube" />
-        <button @onclick="SendChat" disabled="@State.Sending"
-            style="margin-top:12px; padding:10px 24px; background:#00d4ff; color:#0a0e1a; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:14px">
-            @if (State.Sending) { <span>@State.Progress</span> } else { <span>Send</span> }
-        </button>
 
-        <div style="margin-top:16px; flex:1; overflow-y:auto; font-size:13px">
-            @if (!string.IsNullOrEmpty(State.Thinking))
-            {
-                <details open style="margin-bottom:12px">
-                    <summary style="color:#7c3aed; cursor:pointer; font-weight:bold; margin-bottom:8px">Thinking Process</summary>
-                    <pre style="color:#94a3b8; white-space:pre-wrap; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; margin:0">@State.Thinking</pre>
-                </details>
-            }
-            @foreach (var msg in State.ChatHistory)
-            {
-                <div style="margin-bottom:8px; padding:8px; border-radius:6px; background:@(msg.IsUser ? "rgba(0,212,255,0.1)" : "rgba(0,255,136,0.05)")">
-                    <span style="font-weight:bold; color:@(msg.IsUser ? "#00d4ff" : "#00ff88")">@(msg.IsUser ? "You" : "AI"):</span>
-                    <span style="color:#cbd5e1; margin-left:6px">@msg.Text</span>
+        @* Chat Tab *@
+        @if (_activeTab == 0)
+        {
+            <div style="padding:24px; display:flex; flex-direction:column; flex:1">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px">
+                    <h3 style="color:#00d4ff; margin:0">Design Assistant</h3>
+                    <button @onclick="NewChat" disabled="@State.Sending"
+                        style="padding:6px 16px; background:transparent; color:#94a3b8; border:1px solid rgba(148,163,184,0.3); border-radius:4px; cursor:pointer; font-weight:500; font-size:12px">
+                        New
+                    </button>
                 </div>
-            }
-            @if (!string.IsNullOrEmpty(State.StreamingResponse))
-            {
-                <div style="margin-bottom:8px; padding:8px; border-radius:6px; background:rgba(0,255,136,0.05)">
-                    <span style="font-weight:bold; color:#00ff88">AI:</span>
-                    <span style="color:#cbd5e1; margin-left:6px">@State.StreamingResponse</span>
-                    <span style="display:inline-block; width:8px; height:14px; background:#00ff88; margin-left:2px; animation:blink 1s step-end infinite"></span>
+                <input @bind="State.ChatInput" @bind:event="oninput"
+                    @onkeyup="HandleKeyUp"
+                    style="width:100%; padding:12px; background:#111827; border:1px solid rgba(0,212,255,0.3); color:#e2e8f0; border-radius:4px; font-size:14px"
+                    placeholder="Describe your 3D idea, e.g. Create a blue cube" />
+                
+                @* File Upload Section *@
+                <div style="margin-top:12px">
+                    <MudFileUpload T="IBrowserFile" OnFilesChanged="OnFileSelected" AcceptedExtensions=".stl">
+                        <CustomContent>
+                        <MudButton OnClick="@context.OpenFilePickerAsync" Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.UploadFile">
+                            Import STL
+                        </MudButton>
+                            </CustomContent>
+                    </MudFileUpload>
+                    
+                    @if (_uploading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                    }
                 </div>
-            }
-        </div>
+                
+                <button @onclick="SendChat" disabled="@State.Sending"
+                    style="margin-top:12px; width:100%; padding:10px 24px; background:#00d4ff; color:#0a0e1a; border:none; border-radius:4px; cursor:pointer; font-weight:bold; font-size:14px">
+                    @if (State.Sending) { <span>@State.Progress</span> } else { <span>Send</span> }
+                </button>
+
+                <div style="margin-top:16px; flex:1; overflow-y:auto; font-size:13px">
+                    @if (!string.IsNullOrEmpty(State.Thinking))
+                    {
+                        <details open style="margin-bottom:12px">
+                            <summary style="color:#7c3aed; cursor:pointer; font-weight:bold; margin-bottom:8px">Thinking Process</summary>
+                            <pre style="color:#94a3b8; white-space:pre-wrap; font-family:'JetBrains Mono',monospace; font-size:12px; line-height:1.6; margin:0">@State.Thinking</pre>
+                        </details>
+                    }
+                    @foreach (var msg in State.ChatHistory)
+                    {
+                        <div style="margin-bottom:8px; padding:8px; border-radius:6px; background:@(msg.IsUser ? "rgba(0,212,255,0.1)" : "rgba(0,255,136,0.05)")">
+                            <span style="font-weight:bold; color:@(msg.IsUser ? "#00d4ff" : "#00ff88")">@(msg.IsUser ? "You" : "AI"):</span>
+                            <span style="color:#cbd5e1; margin-left:6px">@msg.Text</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(State.StreamingResponse))
+                    {
+                        <div style="margin-bottom:8px; padding:8px; border-radius:6px; background:rgba(0,255,136,0.05)">
+                            <span style="font-weight:bold; color:#00ff88">AI:</span>
+                            <span style="color:#cbd5e1; margin-left:6px">@State.StreamingResponse</span>
+                            <span style="display:inline-block; width:8px; height:14px; background:#00ff88; margin-left:2px; animation:blink 1s step-end infinite"></span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Components Tab *@
+        @if (_activeTab == 1)
+        {
+            <div style="flex:1; overflow-y:auto; padding:12px">
+                @if (State.Components.Count == 0)
+                {
+                    <div style="text-align:center; padding:40px 20px; color:#64748b; font-size:13px; line-height:1.8">
+                        <div style="font-size:32px; margin-bottom:12px; opacity:0.4">&#9632;&#9632;&#9632;</div>
+                        No components yet.<br/>
+                        Import an STL file or generate a model<br/>
+                        with multiple parts to see them here.
+                    </div>
+                }
+                else
+                {
+                    <div style="margin-bottom:12px; display:flex; align-items:center; justify-content:space-between">
+                        <span style="font-size:12px; color:#64748b">@State.Components.Count component(s)</span>
+                        <button @onclick="DeselectAll"
+                            style="padding:3px 10px; background:transparent; color:#94a3b8; border:1px solid rgba(148,163,184,0.3); border-radius:3px; cursor:pointer; font-size:11px">
+                            Deselect All
+                        </button>
+                    </div>
+                    <ComponentTree Components="State.Components"
+                                   SelectedId="State.SelectedComponentId"
+                                   OnNodeSelected="OnComponentSelected"
+                                   OnVisibilityChanged="args => OnComponentVisibilityChanged(args.ComponentId, args.IsVisible)" />
+                }
+            </div>
+        }
     </div>
 
-    @* --- Right Preview Panel --- *@
+    @* --- Center Preview Panel --- *@
     <div style="flex:1; position:relative">
-        <ModelViewer ModelUrl="@(State.ModelUrl ?? "")" SceneData="@State.SceneData" />
+        <ModelViewer ModelUrl="@(State.ModelUrl ?? "")" SceneData="@State.SceneData" IsStl="@State.IsStl" ComponentTriangleCounts="@State.ComponentTriangleCounts" />
 
         @if (!string.IsNullOrEmpty(State.ModelUrl))
         {
@@ -98,6 +174,14 @@ else
                 </MudChip>
             </div>
         }
+
+        @* Component count indicator on viewer *@
+        @if (State.Components.Count > 0)
+        {
+            <div style="position:absolute; bottom:12px; left:12px; z-index:10; background:rgba(13,17,23,0.85); padding:4px 10px; border-radius:4px; border:1px solid rgba(0,212,255,0.15); font-size:11px; color:#94a3b8">
+                @State.Components.Count component(s) | Selected: @(State.SelectedComponentId ?? "none")
+            </div>
+        }
     </div>
 </div>
 }
@@ -114,6 +198,8 @@ else
     private CancellationTokenSource? _cts;
     private ModelFormat _downloadFormat = ModelFormat.GLB;
     private bool _downloading;
+    private bool _uploading;
+    private int _activeTab = 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -225,6 +311,12 @@ else
                     };
                 }
             }
+
+            // Handle component-level modifications (client-side JS only)
+            if (result.Type == "component_modify" && result.Metadata != null)
+            {
+                await HandleComponentModifyAsync(result.Metadata);
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { State.Response = $"Error: {ex.Message}"; }
@@ -324,5 +416,297 @@ else
             _isLoading = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs args)
+    {
+        if (args.FileCount == 0) return;
+        var file = args.File;
+
+        _uploading = true;
+        StateHasChanged();
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+            using var content = new MultipartFormDataContent();
+            var streamContent = new StreamContent(stream);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            content.Add(streamContent, "file", file.Name);
+
+            var httpClient = HttpClientFactory.CreateClient();
+            var response = await httpClient.PostAsync($"{Navigation.BaseUri}api/import/stl", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var apiResponse = System.Text.Json.JsonSerializer.Deserialize<ApiResponse<ModelResponse>>(responseBody, options);
+
+            if (response.IsSuccessStatusCode && apiResponse?.Data != null)
+            {
+                State.ModelId = apiResponse.Data.ModelId;
+                State.ModelUrl = apiResponse.Data.FileUrl;
+                State.IsStl = true;
+                State.SceneData = null;
+                State.ComponentTriangleCounts = apiResponse.Data.ComponentTriangleCounts ?? new List<int>();
+                State.ChatHistory.Add(new DesignStudioState.ChatEntry(
+                    $"STL file imported successfully! Model ID: {apiResponse.Data.ModelId}", false));
+
+                Logger.LogInformation("STL uploaded and imported. ModelId: {ModelId}, Triangles: {TriCounts}",
+                    apiResponse.Data.ModelId, State.ComponentTriangleCounts.Count > 0
+                        ? string.Join(",", State.ComponentTriangleCounts) : "none");
+
+                // Trigger re-render so ModelViewer starts loading the STL immediately
+                StateHasChanged();
+
+                // Fetch component data from Three.js — retry up to 5 times
+                for (int retry = 0; retry < 5; retry++)
+                {
+                    await Task.Delay(300);
+                    if (await FetchComponentListAsync()) break;
+                    Console.WriteLine($"[DesignStudio] Retry {retry + 1}/5 for component list...");
+                }
+
+                // Switch to Components tab if we have multiple components
+                if (State.Components.Count > 1) _activeTab = 1;
+            }
+            else
+            {
+                var errorMsg = apiResponse?.Message ?? $"HTTP {(int)response.StatusCode}";
+                Logger.LogError("STL upload failed: {Error}", errorMsg);
+                State.ChatHistory.Add(new DesignStudioState.ChatEntry($"Import failed: {errorMsg}", false));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error uploading STL file");
+            State.ChatHistory.Add(new DesignStudioState.ChatEntry($"Upload error: {ex.Message}", false));
+        }
+        finally
+        {
+            _uploading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Fetches component list from the Three.js scene via JSInterop
+    /// </summary>
+    /// <returns>true if components were successfully fetched</returns>
+    private async Task<bool> FetchComponentListAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string>("getComponentList");
+            Console.WriteLine($"[DesignStudio] getComponentList returned: {json?.Length ?? 0} chars");
+
+            if (string.IsNullOrEmpty(json) || json == "[]")
+            {
+                Console.WriteLine("[DesignStudio] getComponentList returned empty");
+                return false;
+            }
+
+            var components = System.Text.Json.JsonSerializer.Deserialize<List<ComponentInfo>>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (components == null || components.Count == 0)
+            {
+                Console.WriteLine("[DesignStudio] Deserialized components is null or empty");
+                return false;
+            }
+
+            State.Components = components.Select(c => new ComponentVm
+            {
+                Id = c.Name ?? "",
+                Name = c.Name ?? "",
+                TriangleCount = c.TriangleCount,
+                IsVisible = c.Visible
+            }).ToList();
+
+            Logger.LogInformation("[DesignStudio] Fetched {Count} components", State.Components.Count);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[DesignStudio] Failed to fetch component list");
+            Console.WriteLine($"[DesignStudio] FetchComponentListAsync error: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Handles component selection from the tree
+    /// </summary>
+    private async Task OnComponentSelected(string componentId)
+    {
+        if (string.IsNullOrEmpty(componentId)) return;
+
+        State.SelectedComponentId = componentId;
+        StateHasChanged();
+
+        try
+        {
+            await JS.InvokeVoidAsync("selectComponent", componentId);
+            Logger.LogInformation("[DesignStudio] Selected component: {ComponentId}", componentId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[DesignStudio] Failed to select component in 3D scene");
+        }
+    }
+
+    /// <summary>
+    /// Toggles component visibility
+    /// </summary>
+    private async Task OnComponentVisibilityChanged(string componentId, bool visible)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("toggleComponentVisibility", componentId, visible);
+
+            var comp = State.Components.FirstOrDefault(c => c.Id == componentId);
+            if (comp != null)
+            {
+                comp.IsVisible = visible;
+            }
+
+            Logger.LogInformation("[DesignStudio] Toggled visibility for {ComponentId}: {Visible}", componentId, visible);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[DesignStudio] Failed to toggle component visibility");
+        }
+    }
+
+    /// <summary>
+    /// Deselects all components
+    /// </summary>
+    private async Task DeselectAll()
+    {
+        State.SelectedComponentId = null;
+        StateHasChanged();
+
+        try
+        {
+            await JS.InvokeVoidAsync("deselectAllComponents");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[DesignStudio] Failed to deselect all components");
+        }
+    }
+
+    /// <summary>
+    /// Handles component modification responses from ChatOrchestrationService.
+    /// Resolves component indices to actual IDs and calls JS interop.
+    /// </summary>
+    private async Task HandleComponentModifyAsync(Dictionary<string, object> metadata)
+    {
+        if (!metadata.TryGetValue("componentAction", out var actionVal) || actionVal is not string actionJson)
+        {
+            Logger.LogWarning("[DesignStudio] component_modify response missing componentAction");
+            return;
+        }
+
+        Liuvis.Core.DTOs.Responses.ComponentModifyAction? action;
+        try
+        {
+            action = System.Text.Json.JsonSerializer.Deserialize<Liuvis.Core.DTOs.Responses.ComponentModifyAction>(actionJson);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[DesignStudio] Failed to deserialize ComponentModifyAction");
+            return;
+        }
+
+        if (action == null) return;
+
+        Logger.LogInformation("[DesignStudio] Handling component_modify: Action={Action}, Index={Index}",
+            action.Action, action.ComponentIndex);
+
+        try
+        {
+            switch (action.Action)
+            {
+                case "showAll":
+                    await JS.InvokeVoidAsync("showAllComponents");
+                    foreach (var c in State.Components)
+                        c.IsVisible = true;
+                    break;
+
+                case "visibility":
+                {
+                    var compId = ResolveComponentId(action.ComponentIndex);
+                    if (compId != null)
+                    {
+                        await JS.InvokeVoidAsync("toggleComponentVisibility", compId, action.Visible ?? true);
+                        var comp = State.Components.FirstOrDefault(c => c.Id == compId);
+                        if (comp != null) comp.IsVisible = action.Visible ?? true;
+                    }
+                    break;
+                }
+
+                case "color":
+                {
+                    var compId = ResolveComponentId(action.ComponentIndex);
+                    if (compId != null && !string.IsNullOrEmpty(action.Color))
+                    {
+                        await JS.InvokeVoidAsync("setComponentColor", compId, action.Color);
+                        var comp = State.Components.FirstOrDefault(c => c.Id == compId);
+                        if (comp != null) comp.Color = action.Color;
+                    }
+                    break;
+                }
+
+                case "scale":
+                {
+                    var compId = ResolveComponentId(action.ComponentIndex);
+                    if (compId != null && action.Scale.HasValue)
+                    {
+                        await JS.InvokeVoidAsync("setComponentScale", compId, action.Scale.Value);
+                    }
+                    break;
+                }
+
+                default:
+                    Logger.LogWarning("[DesignStudio] Unknown component action: {Action}", action.Action);
+                    break;
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[DesignStudio] Component modification failed");
+        }
+    }
+
+    /// <summary>
+    /// Resolves a 1-based component index to the actual component ID string.
+    /// </summary>
+    private string? ResolveComponentId(int? index)
+    {
+        if (index == null || index < 1) return null;
+
+        var idx = index.Value - 1; // Convert to 0-based
+        if (idx >= 0 && idx < State.Components.Count)
+            return State.Components[idx].Id;
+
+        Logger.LogWarning("[DesignStudio] Component index {Index} out of range (count={Count})",
+            index, State.Components.Count);
+        return null;
+    }
+
+    /// <summary>
+    /// Component info parsed from Three.js getComponentList() JSON
+    /// </summary>
+    private class ComponentInfo
+    {
+        public string Name { get; set; } = "";
+        public bool Visible { get; set; } = true;
+        public int TriangleCount { get; set; }
+        public string? Color { get; set; }
+        public bool IsSelected { get; set; }
+        public List<double>? Center { get; set; }
+        public List<double>? Size { get; set; }
     }
 }

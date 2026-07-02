@@ -1,3 +1,5 @@
+@using Liuvis.Web.Models
+
 <div class="structure-tree pa-2">
     <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="mb-2">Components</MudText>
     @foreach (var item in _treeItems)
@@ -10,8 +12,8 @@
 
 @code {
     [Parameter] public List<ComponentVm> Components { get; set; } = new();
-    [Parameter] public Guid? SelectedId { get; set; }
-    [Parameter] public EventCallback<Guid> OnNodeSelected { get; set; }
+    [Parameter] public string? SelectedId { get; set; }
+    [Parameter] public EventCallback<string> OnNodeSelected { get; set; }
 
     private List<TreeItemData> _treeItems = new();
 
@@ -27,6 +29,6 @@
     public class TreeItemData
     {
         public string Text { get; set; } = string.Empty;
-        public Guid Value { get; set; }
+        public string Value { get; set; } = string.Empty;
     }
 }

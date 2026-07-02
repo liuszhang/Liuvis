@@ -170,6 +170,31 @@ public class ChatOrchestrationService
             };
         }
 
+        await NotifyProgress(sessionId, "Analyzing modification request...");
+
+        // Check for component-index-based lightweight modifications
+        var isComponentIndexModify = TryResolveComponentIndexModify(intent.ParsedParameters, out var compAction);
+        if (isComponentIndexModify && compAction != null)
+        {
+            var compMsg = FormatComponentModifyMessage(compAction);
+            var compAssistantMsg = await _sessionManager.AddMessage(sessionId, MessageRole.Assistant, compMsg, ct);
+
+            return new ChatResponse
+            {
+                SessionId = sessionId,
+                MessageId = compAssistantMsg.MessageId,
+                AssistantMessage = compMsg,
+                IntentType = IntentType.Modify,
+                Thinking = intent.Thinking,
+                Type = "component_modify",
+                Metadata = new Dictionary<string, object>
+                {
+                    ["componentAction"] = System.Text.Json.JsonSerializer.Serialize(compAction)
+                }
+            };
+        }
+
+        // Fall through to full modification engine for server-side modifications
         await NotifyProgress(sessionId, "Loading current model...");
         var model = await _modelGenerator.GetModel(session.CurrentModelId.Value, ct);
         if (model == null)
@@ -482,5 +507,230 @@ public class ChatOrchestrationService
             sb.AppendLine("No components.");
         }
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Detects if the NLU-parsed modification is a component-index-based lightweight operation
+    /// that can be handled client-side (color, visibility, scale).
+    /// Returns a ComponentModifyAction if applicable, null otherwise.
+    /// </summary>
+    private static bool TryResolveComponentIndexModify(
+        Dictionary<string, object> parameters,
+        out Liuvis.Core.DTOs.Responses.ComponentModifyAction? action)
+    {
+        action = null;
+
+        // Must have a changeType
+        if (!parameters.TryGetValue("changeType", out var ctVal) || ctVal is not string changeType)
+            return false;
+
+        // Check for visibility changes
+        if (string.Equals(changeType, "visibility", StringComparison.OrdinalIgnoreCase))
+        {
+            // "显示所有组件" / "显示全部"
+            if (parameters.TryGetValue("showAll", out var saVal) && IsTruthy(saVal))
+            {
+                action = new Liuvis.Core.DTOs.Responses.ComponentModifyAction { Action = "showAll" };
+                return true;
+            }
+
+            // "隐藏组件3" / "显示组件1"
+            var hasIndex = TryGetTargetIndex(parameters, out var visIndex);
+            var hasVisibility = TryGetBoolParam(parameters, "visibility", out var visible);
+
+            if (hasIndex && hasVisibility)
+            {
+                action = new Liuvis.Core.DTOs.Responses.ComponentModifyAction
+                {
+                    Action = "visibility",
+                    ComponentIndex = visIndex,
+                    Visible = visible
+                };
+                return true;
+            }
+
+            return false;
+        }
+
+        // Check for color changes by component index
+        if (string.Equals(changeType, "color", StringComparison.OrdinalIgnoreCase))
+        {
+            if (TryGetTargetIndex(parameters, out var colorIndex) &&
+                parameters.TryGetValue("color", out var colorVal) &&
+                TryGetStringValue(colorVal, out var color))
+            {
+                action = new Liuvis.Core.DTOs.Responses.ComponentModifyAction
+                {
+                    Action = "color",
+                    ComponentIndex = colorIndex,
+                    Color = color
+                };
+                return true;
+            }
+            return false;
+        }
+
+        // Check for size/scale changes by component index
+        if (string.Equals(changeType, "size", StringComparison.OrdinalIgnoreCase))
+        {
+            if (TryGetTargetIndex(parameters, out var sizeIndex))
+            {
+                var scale = 1.0;
+                if (parameters.TryGetValue("scaleFactor", out var sfVal))
+                    scale = TryGetDoubleValue(sfVal);
+                else if (parameters.TryGetValue("scale", out var sVal))
+                    scale = TryGetDoubleValue(sVal);
+
+                if (Math.Abs(scale - 1.0) > 0.001)
+                {
+                    action = new Liuvis.Core.DTOs.Responses.ComponentModifyAction
+                    {
+                        Action = "scale",
+                        ComponentIndex = sizeIndex,
+                        Scale = scale
+                    };
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Extracts target index from parameters. Looks for targetIndex first, then tries targetComponent as numeric string.
+    /// Handles JsonElement values from System.Text.Json deserialization.
+    /// </summary>
+    private static bool TryGetTargetIndex(Dictionary<string, object> parameters, out int index)
+    {
+        // targetIndex is the primary field
+        if (parameters.TryGetValue("targetIndex", out var tiVal))
+        {
+            if (tiVal is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Number)
+            {
+                index = je.GetInt32();
+                return index > 0;
+            }
+            index = Convert.ToInt32(tiVal);
+            return index > 0;
+        }
+
+        // Fallback: targetComponent as numeric string
+        if (parameters.TryGetValue("targetComponent", out var tcVal))
+        {
+            if (tcVal is System.Text.Json.JsonElement tje && tje.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var s = tje.GetString();
+                if (int.TryParse(s, out index) && index > 0)
+                    return true;
+            }
+            else if (tcVal is string tcStr && int.TryParse(tcStr, out index) && index > 0)
+            {
+                return true;
+            }
+        }
+
+        index = 0;
+        return false;
+    }
+
+    private static bool TryGetBoolParam(Dictionary<string, object> parameters, string key, out bool value)
+    {
+        if (parameters.TryGetValue(key, out var val))
+        {
+            if (val is bool b)
+            {
+                value = b;
+                return true;
+            }
+            if (val is System.Text.Json.JsonElement je)
+            {
+                if (je.ValueKind == System.Text.Json.JsonValueKind.True)
+                {
+                    value = true;
+                    return true;
+                }
+                if (je.ValueKind == System.Text.Json.JsonValueKind.False)
+                {
+                    value = false;
+                    return true;
+                }
+                if (je.ValueKind == System.Text.Json.JsonValueKind.String &&
+                    bool.TryParse(je.GetString(), out var sb))
+                {
+                    value = sb;
+                    return true;
+                }
+            }
+            if (val is string s && bool.TryParse(s, out var strb))
+            {
+                value = strb;
+                return true;
+            }
+        }
+        value = false;
+        return false;
+    }
+
+    private static bool TryGetStringValue(object val, out string result)
+    {
+        if (val is string s)
+        {
+            result = s;
+            return true;
+        }
+        if (val is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            result = je.GetString() ?? string.Empty;
+            return true;
+        }
+        result = string.Empty;
+        return false;
+    }
+
+    private static bool IsTruthy(object val)
+    {
+        if (val is true) return true;
+        if (val is System.Text.Json.JsonElement je)
+        {
+            if (je.ValueKind == System.Text.Json.JsonValueKind.True) return true;
+            if (je.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var s = je.GetString();
+                return s != null && (s.Equals("true", StringComparison.OrdinalIgnoreCase) || s == "1");
+            }
+            if (je.ValueKind == System.Text.Json.JsonValueKind.Number)
+                return je.GetDouble() != 0;
+        }
+        if (val is string str && bool.TryParse(str, out var b))
+            return b;
+        return false;
+    }
+
+    private static double TryGetDoubleValue(object val)
+    {
+        if (val is double d) return d;
+        if (val is int i) return i;
+        if (val is float f) return f;
+        if (val is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Number)
+            return je.GetDouble();
+        try { return Convert.ToDouble(val); }
+        catch { return 1.0; }
+    }
+
+    private static string FormatComponentModifyMessage(Liuvis.Core.DTOs.Responses.ComponentModifyAction action)
+    {
+        return action.Action switch
+        {
+            "color" => $"Changed component {action.ComponentIndex} color to {action.Color}.",
+            "visibility" when action.Visible == true =>
+                $"Showing component {action.ComponentIndex}.",
+            "visibility" when action.Visible == false =>
+                $"Hiding component {action.ComponentIndex}.",
+            "scale" => $"Scaled component {action.ComponentIndex} by {action.Scale}x.",
+            "showAll" => "Showing all components.",
+            _ => $"Applied {action.Action} to component {action.ComponentIndex}."
+        };
     }
 }

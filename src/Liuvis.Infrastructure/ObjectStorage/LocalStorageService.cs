@@ -69,10 +69,16 @@ public class LocalStorageService : IObjectStorageService
 
     private string GetFilePath(string key)
     {
-        // Sanitize key to prevent directory traversal
-        var sanitizedKey = key.Replace('\\', '/').TrimStart('/');
-        sanitizedKey = Path.GetInvalidFileNameChars()
-            .Aggregate(sanitizedKey, (current, c) => current.Replace(c, '_'));
+        // Sanitize each path segment individually to preserve directory structure
+        var segments = key.Replace('\\', '/').TrimStart('/').Split('/');
+        var sanitizedSegments = segments.Select(segment =>
+        {
+            var sanitized = Path.GetInvalidFileNameChars()
+                .Aggregate(segment, (current, c) => current.Replace(c, '_'));
+            // Path.Combine on Windows may still need backslash; let Path.Combine handle joining
+            return sanitized;
+        });
+        var sanitizedKey = Path.Combine(sanitizedSegments.ToArray());
         return Path.Combine(_basePath, sanitizedKey);
     }
 }

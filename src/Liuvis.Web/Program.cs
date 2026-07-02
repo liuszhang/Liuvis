@@ -61,12 +61,12 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
     {
-        c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
-        {
-            Title = "Liuvis API",
-            Version = "v1",
-            Description = "AI-driven 3D Design Platform"
-        });
+        //c.SwaggerDoc("v1", new
+        //{
+        //    Title = "Liuvis API",
+        //    Version = "v1",
+        //    Description = "AI-driven 3D Design Platform"
+        //});
     });
 
     // -------------------------------------------------------------------------

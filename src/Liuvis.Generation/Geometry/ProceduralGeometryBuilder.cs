@@ -67,6 +67,8 @@ public class ProceduralGeometryBuilder
     {
         var allVertices = new List<float>();
         var allIndices = new List<uint>();
+        var triComponentIds = new List<ushort>(); // per-triangle component index
+        ushort compIdx = 1; // 1-based, 0 reserved
 
         foreach (var obj in scene.Objects)
         {
@@ -75,7 +77,11 @@ public class ProceduralGeometryBuilder
 
             var offset = (uint)(allVertices.Count / 8);
             allVertices.AddRange(geometry.Vertices);
+            var objTriCount = geometry.Indices.Length / 3;
+            for (int i = 0; i < objTriCount; i++)
+                triComponentIds.Add(compIdx);
             allIndices.AddRange(geometry.Indices.Select(i => i + offset));
+            compIdx++;
         }
 
         if (allIndices.Count == 0)
@@ -121,11 +127,12 @@ public class ProceduralGeometryBuilder
             bw.Write(posFloats[i1 * 3]); bw.Write(posFloats[i1 * 3 + 1]); bw.Write(posFloats[i1 * 3 + 2]);
             bw.Write(posFloats[i2 * 3]); bw.Write(posFloats[i2 * 3 + 1]); bw.Write(posFloats[i2 * 3 + 2]);
 
-            bw.Write((ushort)0);
+            // Encode component index (1-based) in the attribute byte count field
+            bw.Write(triComponentIds[t]);
         }
 
-        _logger.LogInformation("Built STL: {VertCount}v, {TriCount}triangles, {ByteCount}bytes",
-            vertexCount, triangleCount, ms.Length);
+        _logger.LogInformation("Built STL: {VertCount}v, {TriCount}triangles, {CompCount}components, {ByteCount}bytes",
+            vertexCount, triangleCount, compIdx - 1, ms.Length);
 
         return ms.ToArray();
     }

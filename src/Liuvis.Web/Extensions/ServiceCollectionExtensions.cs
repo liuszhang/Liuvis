@@ -126,6 +126,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<LLMDesignService>();
         services.AddScoped<ProceduralGeometryBuilder>();
         services.AddScoped<StepExporter>();
+        services.AddScoped<Liuvis.Generation.Importers.StlImporter>();
 
         // -------------------------------------------------------------------------
         // Business Services (core module implementations)
@@ -141,6 +142,11 @@ public static class ServiceCollectionExtensions
         // Orchestration Services (Blazor-friendly pipeline wrappers)
         // -------------------------------------------------------------------------
         services.AddScoped<ChatOrchestrationService>();
+
+        // -------------------------------------------------------------------------
+        // Component Management
+        // -------------------------------------------------------------------------
+        services.AddScoped<Liuvis.Design.Services.ComponentManager>();
 
         // -------------------------------------------------------------------------
         // UI State (scoped — survives route switches within the same circuit)
