@@ -75,6 +75,10 @@ public class ProceduralGeometryBuilder
             var geometry = GenerateGeometry(obj);
             if (geometry.VertexCount == 0) continue;
 
+            // Bake object transform (position + rotation) into vertex data.
+            // STL has no concept of hierarchical transforms, unlike GLTF.
+            ApplyTransform(geometry.Vertices, obj.Position, obj.Rotation);
+
             var offset = (uint)(allVertices.Count / 8);
             allVertices.AddRange(geometry.Vertices);
             var objTriCount = geometry.Indices.Length / 3;
@@ -135,6 +139,57 @@ public class ProceduralGeometryBuilder
             vertexCount, triangleCount, compIdx - 1, ms.Length);
 
         return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Apply object-level position and rotation to vertex data in-place.
+    /// Each vertex is 8 floats: [px, py, pz, nx, ny, nz, u, v].
+    /// Rotation (Euler XYZ, radians) is applied to both position and normal.
+    /// </summary>
+    private static void ApplyTransform(float[] vertices, double[] position, double[] rotation)
+    {
+        var px = (float)(position?.Length > 0 ? position[0] : 0);
+        var py = (float)(position?.Length > 1 ? position[1] : 0);
+        var pz = (float)(position?.Length > 2 ? position[2] : 0);
+
+        var rx = (float)(rotation?.Length > 0 ? rotation[0] : 0);
+        var ry = (float)(rotation?.Length > 1 ? rotation[1] : 0);
+        var rz = (float)(rotation?.Length > 2 ? rotation[2] : 0);
+
+        // Early exit if identity transform
+        if (px == 0 && py == 0 && pz == 0 && rx == 0 && ry == 0 && rz == 0)
+            return;
+
+        // R = Rz * Ry * Rx (extrinsic XYZ, applied to column vector)
+        var cx = MathF.Cos(rx); var sx = MathF.Sin(rx);
+        var cy = MathF.Cos(ry); var sy = MathF.Sin(ry);
+        var cz = MathF.Cos(rz); var sz = MathF.Sin(rz);
+
+        float m00 = cy * cz;
+        float m01 = cz * sx * sy - cx * sz;
+        float m02 = cx * cz * sy + sx * sz;
+        float m10 = cy * sz;
+        float m11 = cx * cz + sx * sy * sz;
+        float m12 = -cz * sx + cx * sy * sz;
+        float m20 = -sy;
+        float m21 = cy * sx;
+        float m22 = cx * cy;
+
+        for (int i = 0; i < vertices.Length; i += 8)
+        {
+            float vx = vertices[i], vy = vertices[i + 1], vz = vertices[i + 2];
+            float nx = vertices[i + 3], ny = vertices[i + 4], nz = vertices[i + 5];
+
+            // Rotate + translate position
+            vertices[i]     = m00 * vx + m01 * vy + m02 * vz + px;
+            vertices[i + 1] = m10 * vx + m11 * vy + m12 * vz + py;
+            vertices[i + 2] = m20 * vx + m21 * vy + m22 * vz + pz;
+
+            // Rotate normal (no translation)
+            vertices[i + 3] = m00 * nx + m01 * ny + m02 * nz;
+            vertices[i + 4] = m10 * nx + m11 * ny + m12 * nz;
+            vertices[i + 5] = m20 * nx + m21 * ny + m22 * nz;
+        }
     }
 
     private static GeometryData GenerateGeometry(SceneObject obj)
