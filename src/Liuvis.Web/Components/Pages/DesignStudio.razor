@@ -446,6 +446,9 @@ else
                 State.ModelId = apiResponse.Data.ModelId;
                 State.ModelUrl = apiResponse.Data.FileUrl;
                 State.IsStl = true;
+
+                // Sync session's CurrentModelRef so LLM modify can see the imported model
+                await SessionManager.UpdateModelRef(State.SessionId, apiResponse.Data.ModelId);
                 State.SceneData = null;
                 State.ComponentTriangleCounts = apiResponse.Data.ComponentTriangleCounts ?? new List<int>();
                 State.ChatHistory.Add(new DesignStudioState.ChatEntry(
