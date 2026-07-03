@@ -47,6 +47,7 @@ Thumbs.db
 ## Dev
 Docs
 .workbuddy/
+.mimocode
 
 ## Settings (contains secrets)
 src/Liuvis.Web/liuvis-settings.json

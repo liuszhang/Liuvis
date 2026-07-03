@@ -153,7 +153,7 @@ else
         @if (!string.IsNullOrEmpty(State.ModelUrl))
         {
             <div style="position:absolute; top:12px; right:12px; z-index:10; display:flex; align-items:center; gap:8px; background:rgba(13,17,23,0.85); padding:6px 10px; border-radius:6px; border:1px solid rgba(0,212,255,0.15)">
-                <MudSelect T="ModelFormat" @bind-Value="_downloadFormat" Variant="Variant.Outlined" Dense="true"
+                <MudSelect T="ModelFormat" @bind-Value="_downloadFormat" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
                            Style="min-width:100px; font-size:12px">
                     <MudSelectItem Value="ModelFormat.GLB">GLB</MudSelectItem>
                     <MudSelectItem Value="ModelFormat.STL">STL</MudSelectItem>
@@ -312,6 +312,13 @@ else
                 }
             }
 
+            // After LLM model generation, build component list directly from SceneData
+            if (result.Type is "model_ready" or "model_updated" && State.Components.Count == 0 && State.SceneData != null)
+            {
+                BuildComponentsFromSceneData(State.SceneData);
+                if (State.Components.Count > 1) _activeTab = 1;
+            }
+
             // Handle component-level modifications (client-side JS only)
             if (result.Type == "component_modify" && result.Metadata != null)
             {
@@ -350,12 +357,46 @@ else
             }
             else
             {
-                if (string.IsNullOrEmpty(State.SceneData))
-                    throw new InvalidOperationException("No scene data available for format conversion.");
+                // Build SceneDescription from multiple sources
+                SceneDescription? scene = null;
 
-                var scene = System.Text.Json.JsonSerializer.Deserialize<SceneDescription>(State.SceneData);
+                // 1) Try State.SceneData
+                if (!string.IsNullOrEmpty(State.SceneData))
+                {
+                    Logger.LogDebug("Using State.SceneData for conversion");
+                    scene = System.Text.Json.JsonSerializer.Deserialize<SceneDescription>(State.SceneData);
+                }
+
+                // 2) Try model metadata
+                if (scene == null && model.Metadata.TryGetValue("_scene", out var sceneMeta) && !string.IsNullOrEmpty(sceneMeta))
+                {
+                    Logger.LogDebug("Using model metadata _scene for conversion");
+                    scene = System.Text.Json.JsonSerializer.Deserialize<SceneDescription>(sceneMeta);
+                }
+
+                // 3) Rebuild from model components
+                if (scene == null && model.Components.Count > 0)
+                {
+                    Logger.LogInformation("Rebuilding scene from {Count} model components for format conversion", model.Components.Count);
+                    scene = new SceneDescription
+                    {
+                        Objects = model.Components.Select(c => new SceneObject
+                        {
+                            Type = c.GeometryType,
+                            Color = c.Material?.Color ?? "#00d4ff",
+                            Position = new[] { 0.0, 0.0, 0.0 },
+                            Size = new[] { 1.0, 1.0, 1.0 },
+                            Material = new MaterialProps
+                            {
+                                Metalness = c.Material?.Metalness ?? 0.5,
+                                Roughness = c.Material?.Roughness ?? 0.3
+                            }
+                        }).ToList()
+                    };
+                }
+
                 if (scene == null)
-                    throw new InvalidOperationException("Failed to deserialize scene data.");
+                    throw new InvalidOperationException("No scene data available for format conversion.");
 
                 data = _downloadFormat switch
                 {
@@ -697,6 +738,77 @@ else
         Logger.LogWarning("[DesignStudio] Component index {Index} out of range (count={Count})",
             index, State.Components.Count);
         return null;
+    }
+
+    /// <summary>
+    /// Builds ComponentVm list directly from SceneData JSON, avoiding JS interop timing issues.
+    /// </summary>
+    private void BuildComponentsFromSceneData(string sceneDataJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(sceneDataJson);
+            var root = doc.RootElement;
+
+            // Support both "objects" (camelCase) and "Objects" (PascalCase)
+            if (!root.TryGetProperty("objects", out var objects) && !root.TryGetProperty("Objects", out objects))
+            {
+                Console.WriteLine("[DesignStudio] SceneData has no 'objects' property");
+                return;
+            }
+
+            var components = new List<ComponentVm>();
+
+            // Count type occurrences for unique naming
+            var typeTotals = new Dictionary<string, int>();
+            foreach (var obj in objects.EnumerateArray())
+            {
+                var type = obj.TryGetProperty("type", out var t) ? t.GetString()
+                         : obj.TryGetProperty("Type", out var T) ? T.GetString()
+                         : "box";
+                type = type?.ToLowerInvariant() ?? "box";
+                typeTotals[type] = typeTotals.GetValueOrDefault(type) + 1;
+            }
+
+            var seenCounts = new Dictionary<string, int>();
+            foreach (var obj in objects.EnumerateArray())
+            {
+                var type = obj.TryGetProperty("type", out var t) ? t.GetString()
+                         : obj.TryGetProperty("Type", out var T) ? T.GetString()
+                         : "box";
+                type = type?.ToLowerInvariant() ?? "box";
+
+                // Unique naming: "box" if single, "box_1"/"box_2" if multiple
+                string name = type;
+                if (typeTotals.GetValueOrDefault(type) > 1)
+                {
+                    var count = seenCounts.GetValueOrDefault(type) + 1;
+                    seenCounts[type] = count;
+                    name = $"{type}_{count}";
+                }
+
+                var color = "#00d4ff";
+                if (obj.TryGetProperty("color", out var c))
+                    color = c.GetString() ?? color;
+                else if (obj.TryGetProperty("Color", out var C))
+                    color = C.GetString() ?? color;
+
+                components.Add(new ComponentVm
+                {
+                    Id = name,
+                    Name = name,
+                    Color = color,
+                    IsVisible = true
+                });
+            }
+
+            State.Components = components;
+            Console.WriteLine($"[DesignStudio] Built {components.Count} components from SceneData");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DesignStudio] Failed to parse SceneData: {ex.Message}");
+        }
     }
 
     /// <summary>

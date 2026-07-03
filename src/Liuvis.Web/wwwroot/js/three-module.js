@@ -917,14 +917,14 @@ export function updateComponentColor(componentName, colorHex) {
 // ----------------------------------------------------------------
 export function buildFromSceneDescription(sceneJson) {
     console.log('[three-module] buildFromSceneDescription called, _scene exists:', !!_scene);
-    if (!_scene) return;
+    if (!_scene) return [];
 
     let scene;
     try {
         scene = JSON.parse(sceneJson);
     } catch (e) {
         console.error('[three-module] Failed to parse scene JSON:', e);
-        return;
+        return [];
     }
 
     console.log('[three-module] Parsed scene:', JSON.stringify(scene).substring(0, 200));
@@ -940,10 +940,28 @@ export function buildFromSceneDescription(sceneJson) {
     const objects = scene.objects || scene.Objects || [];
     console.log('[three-module] Objects count:', objects.length);
 
+    // Count occurrences of each type to generate unique names
+    const typeCounters = {};
+    const typeTotals = {};
+    for (const obj of objects) {
+        const t = (obj.type || obj.Type || 'box').toLowerCase();
+        typeTotals[t] = (typeTotals[t] || 0) + 1;
+    }
+
+    const componentList = [];
+    const seenCounters = {};
+
     for (const obj of objects) {
         let geometry;
         const type = (obj.type || obj.Type || 'box').toLowerCase();
         const size = obj.size || obj.Size || [1, 1, 1];
+
+        // Generate unique name: "box" if only one, "box_1"/"box_2" if multiple
+        let name = type;
+        if (typeTotals[type] > 1) {
+            seenCounters[type] = (seenCounters[type] || 0) + 1;
+            name = `${type}_${seenCounters[type]}`;
+        }
 
         if (type === 'sphere') {
             geometry = new THREE.SphereGeometry(size[0] || 0.5, size[1] || 32, size[2] || 32);
@@ -963,7 +981,7 @@ export function buildFromSceneDescription(sceneJson) {
         const material = new THREE.MeshStandardMaterial({ color, metalness, roughness });
 
         const mesh = new THREE.Mesh(geometry, material);
-        mesh.name = type;
+        mesh.name = name;
         const pos = obj.position || obj.Position || [0, 0, 0];
         mesh.position.set(pos[0] || 0, pos[1] || 0, pos[2] || 0);
         if (obj.rotation || obj.Rotation) {
@@ -972,14 +990,29 @@ export function buildFromSceneDescription(sceneJson) {
         }
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.userData = {
+            componentName: name,
+            originalColor: '#' + color.getHexString(),
+            isStlComponent: false
+        };
 
         group.add(mesh);
-        _componentMap.set(mesh.name, mesh);
+        _componentMap.set(name, mesh);
+
+        componentList.push({
+            name: name,
+            triangleCount: 0,
+            visible: true,
+            color: '#' + color.getHexString()
+        });
     }
 
     _currentModel = group;
     _scene.add(group);
     _fitCameraToModel(group);
+
+    console.log(`[three-module] buildFromSceneDescription: ${componentList.length} components`);
+    return componentList;
 }
 
 // ----------------------------------------------------------------
