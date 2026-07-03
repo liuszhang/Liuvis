@@ -1,0 +1,116 @@
+@using Liuvis.Web.Models
+@namespace Liuvis.Web.Components.Sidebar
+
+<div class="component-tree pa-2">
+    @if (Components.Count == 0)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+            No components detected.
+        </MudText>
+    }
+    else
+    {
+        <MudList T="string" Class="pa-0" Dense="true">
+            @foreach (var item in _flatItems)
+            {
+                var isSelected = SelectedId == item.Id;
+                <MudListItem T="string" Class="@($"component-tree-item{(isSelected ? " selected" : "")}")"
+                             Style="@($"padding-left:{(item.Depth * 16 + 8)}px; cursor:pointer; background:{(isSelected ? "rgba(0,212,255,0.12)" : "transparent")}")"
+                             OnClick="() => OnNodeSelected.InvokeAsync(item.Id)">
+                    <ChildContent>
+                        <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+                            <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+                                <MudIcon Icon="@Icons.Material.Filled.ViewInAr"
+                                         Size="Size.Small"
+                                         Color="@(isSelected ? Color.Primary : Color.Secondary)" />
+                                <MudText Typo="Typo.body2"
+                                         Class="@(isSelected ? "mud-text-primary" : "")"
+                                         Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                    @item.Name
+                                </MudText>
+                                @if (item.TriangleCount > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="flex-shrink:0;">
+                                        @FormatTriangleCount(item.TriangleCount)
+                                    </MudText>
+                                }
+                            </div>
+                            <MudIconButton Icon="@(item.IsVisible ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)"
+                                           Size="Size.Small"
+                                           OnClick="(e) => ToggleVisibility(item.Id, e)"
+                                           StopPropagation="true"
+                                           Title="@(item.IsVisible ? "Hide" : "Show")"
+                                           Style="flex-shrink:0;" />
+                        </div>
+                    </ChildContent>
+                </MudListItem>
+            }
+        </MudList>
+    }
+</div>
+
+@code {
+    [Parameter] public List<ComponentVm> Components { get; set; } = new();
+    [Parameter] public string? SelectedId { get; set; }
+    [Parameter] public EventCallback<string> OnNodeSelected { get; set; }
+    [Parameter] public EventCallback<(string ComponentId, bool IsVisible)> OnVisibilityChanged { get; set; }
+
+    private List<FlatTreeItem> _flatItems = new();
+
+    private static string FormatTriangleCount(int count)
+    {
+        if (count >= 1_000_000) return $"{count / 1_000_000.0:F1}M tri";
+        if (count >= 1_000) return $"{count / 1_000.0:F1}K tri";
+        return $"{count} tri";
+    }
+
+    protected override void OnParametersSet()
+    {
+        _flatItems = FlattenTree(Components, 0);
+    }
+
+    private async Task ToggleVisibility(string componentId, EventArgs e)
+    {
+        var item = _flatItems.Find(i => i.Id == componentId);
+        if (item == null) return;
+
+        item.IsVisible = !item.IsVisible;
+        await OnVisibilityChanged.InvokeAsync((componentId, item.IsVisible));
+        StateHasChanged();
+    }
+
+    private static List<FlatTreeItem> FlattenTree(List<ComponentVm> components, int depth)
+    {
+        var result = new List<FlatTreeItem>();
+
+        foreach (var c in components)
+        {
+            result.Add(new FlatTreeItem
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Depth = depth,
+                TriangleCount = c.TriangleCount,
+                IsVisible = c.IsVisible,
+                HasChildren = c.Children is { Count: > 0 }
+            });
+
+            if (c.Children is { Count: > 0 })
+            {
+                result.AddRange(FlattenTree(c.Children, depth + 1));
+            }
+        }
+
+        return result;
+    }
+
+    private class FlatTreeItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public int Depth { get; set; }
+        public int TriangleCount { get; set; }
+        public bool IsVisible { get; set; } = true;
+        public bool HasChildren { get; set; }
+    }
+}

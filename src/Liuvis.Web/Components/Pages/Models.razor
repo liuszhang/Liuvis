@@ -266,7 +266,7 @@
         target ??= _selectedModel;
         if (target is null) return;
 
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete Model",
             $"Are you sure you want to delete \"{target.Name}\"?",
             yesText: "Delete", cancelText: "Cancel");
