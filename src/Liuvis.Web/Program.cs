@@ -5,6 +5,9 @@ using Mapster;
 using MudBlazor.Services;
 using Liuvis.Web.Extensions;
 using Liuvis.Web.Components;
+using CJCore.Framework.Api;
+using CJCore.Framework.Abstractions;
+using Liuvis.Web.Services;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -31,7 +34,51 @@ try
     builder.Services.AddMudServices();
 
     // -------------------------------------------------------------------------
-    // 3. MediatR
+    // 3. CJCore Framework（主题 + AppBar + 模块发现 + 日志）
+    // -------------------------------------------------------------------------
+    builder.Services.AddCJCoreFramework(builder.Configuration, options =>
+    {
+        options.ProductName = "Liuvis Studio";
+        options.EnableThemeSwitcher = true;
+        options.EnableLogDrawer = true;
+        options.BaseUrl = builder.Configuration["BaseUrl"];
+        options.Theme = new ThemeOptions
+        {
+            Light = new PaletteColorOptions
+            {
+                Primary = "#00d4ff",
+                AppbarBackground = "#111827",
+                AppbarText = "#e2e8f0",
+                Background = "#0a0e1a",
+                Surface = "#111827",
+            },
+            Dark = new PaletteColorOptions
+            {
+                Primary = "#00d4ff",
+                Secondary = "#7c3aed",
+                Tertiary = "#00ff88",
+                Background = "#0a0e1a",
+                Surface = "#111827",
+                AppbarBackground = "#111827",
+                DrawerBackground = "#111827",
+                DrawerText = "#e2e8f0",
+                TextPrimary = "#e2e8f0",
+                TextSecondary = "#94a3b8",
+                ActionDefault = "#00d4ff",
+                ActionDisabled = "#4a5568",
+                Divider = "rgba(0, 212, 255, 0.15)",
+                TableLines = "rgba(0, 212, 255, 0.15)",
+                DrawerIcon = "#00d4ff",
+                Info = "#00d4ff",
+                Success = "#00ff88",
+                Warning = "#f59e0b",
+                Error = "#ef4444",
+            }
+        };
+    });
+
+    // -------------------------------------------------------------------------
+    // 4. MediatR
     // -------------------------------------------------------------------------
     builder.Services.AddMediatR(cfg =>
     {
@@ -44,45 +91,43 @@ try
     });
 
     // -------------------------------------------------------------------------
-    // 4. FluentValidation
+    // 5. FluentValidation
     // -------------------------------------------------------------------------
     builder.Services.AddValidatorsFromAssemblyContaining<Liuvis.Core.DTOs.Requests.ChatRequest>();
 
     // -------------------------------------------------------------------------
-    // 5. Mapster
+    // 6. Mapster
     // -------------------------------------------------------------------------
     TypeAdapterConfig.GlobalSettings.Default.NameMatchingStrategy(NameMatchingStrategy.Flexible);
     builder.Services.AddMapster();
 
     // -------------------------------------------------------------------------
-    // 6. Controllers + Swagger
+    // 7. Controllers + Swagger
     // -------------------------------------------------------------------------
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen(c =>
-    {
-        //c.SwaggerDoc("v1", new
-        //{
-        //    Title = "Liuvis API",
-        //    Version = "v1",
-        //    Description = "AI-driven 3D Design Platform"
-        //});
-    });
+    builder.Services.AddSwaggerGen();
 
     // -------------------------------------------------------------------------
-    // 7. SignalR
+    // 8. SignalR
     // -------------------------------------------------------------------------
     builder.Services.AddSignalR();
 
     // -------------------------------------------------------------------------
-    // 8. HttpClient
+    // 9. HttpClient
     // -------------------------------------------------------------------------
     builder.Services.AddHttpClient();
 
     // -------------------------------------------------------------------------
-    // 8. Application Services (via extension method)
+    // 10. Application Services
     // -------------------------------------------------------------------------
     builder.Services.AddLiuvisApplicationServices(builder.Configuration);
+
+    // -------------------------------------------------------------------------
+    // 11. Liuvis 模块注册（菜单 + 程序集发现）
+    // -------------------------------------------------------------------------
+    builder.Services.AddSingleton<IModule, LiuvisModule>();
+    builder.Services.AddSingleton<IMenuService, LiuvisMenuService>();
 
     var app = builder.Build();
 

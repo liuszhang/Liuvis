@@ -14,9 +14,6 @@
 @using Liuvis.Generation.Services
 @using Liuvis.Core.ValueObjects
 
-<MudDialogProvider />
-<MudSnackbarProvider />
-<MudPopoverProvider />
 
 @if (_isLoading)
 {
@@ -95,8 +92,8 @@
                     </MudText>
                 </div>
 
-                <MudSelect T="ModelFormat" @bind-Value="_downloadFormat" Variant="Variant.Outlined" Dense="true"
-                           Style="min-width:130px; font-size:12px">
+                <MudSelect T="ModelFormat" @bind-Value="_downloadFormat" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                           Style="width:60px; font-size:12px">
                     <MudSelectItem Value="ModelFormat.GLB">GLB</MudSelectItem>
                     <MudSelectItem Value="ModelFormat.STL">STL</MudSelectItem>
                     <MudSelectItem Value="ModelFormat.OBJ">OBJ</MudSelectItem>

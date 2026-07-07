@@ -34,6 +34,7 @@
     <ProjectReference Include="..\Liuvis.Generation\Liuvis.Generation.csproj" />
     <ProjectReference Include="..\Liuvis.Modification\Liuvis.Modification.csproj" />
     <ProjectReference Include="..\Liuvis.KnowledgeBase\Liuvis.KnowledgeBase.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Framework\CJCore.Framework\CJCore.Framework.csproj" />
   </ItemGroup>
 
 </Project>
