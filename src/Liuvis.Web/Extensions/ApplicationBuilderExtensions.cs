@@ -51,37 +51,22 @@ public static class ApplicationBuilderExtensions
         {
             using var scope = app.Services.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
+            var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("DatabaseInit");
             try
             {
                 dbContext.Database.EnsureCreated();
 
-                // Ensure llm_providers table exists (EnsureCreated won't add tables to an existing DB)
-                dbContext.Database.ExecuteSqlRaw("""
-                    CREATE TABLE IF NOT EXISTS llm_providers (
-                        "Id" SERIAL PRIMARY KEY,
-                        "Name" VARCHAR(128) NOT NULL,
-                        "Provider" VARCHAR(32) NOT NULL,
-                        "ApiKey" VARCHAR(512),
-                        "BaseUrl" VARCHAR(512),
-                        "Model" VARCHAR(128),
-                        "OllamaUrl" VARCHAR(512),
-                        "OllamaModel" VARCHAR(128),
-                        "MaxTokens" INTEGER NOT NULL DEFAULT 2000,
-                        "Temperature" DOUBLE PRECISION NOT NULL DEFAULT 0.3,
-                        "IsActive" BOOLEAN NOT NULL DEFAULT FALSE,
-                        "CreatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
-                    );
-                    """);
+                // Apply schema upgrades for existing databases
+                // (EnsureCreated only creates missing tables, doesn't alter existing columns)
+                ApplyDatabaseUpgrades(dbContext, logger);
 
-                SeedSettingsFromConfig(dbContext, app.Configuration, scope.ServiceProvider
-                    .GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInit"));
+                SeedSettingsFromConfig(dbContext, app.Configuration, logger);
                 SettingsService.PreloadFromDb(app.Services, scope.ServiceProvider
                     .GetRequiredService<ILoggerFactory>().CreateLogger("SettingsPreload"));
             }
             catch (Exception ex)
             {
-                var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("DatabaseInit");
                 logger.LogWarning(ex, "Database EnsureCreated failed — DB may already exist or be unreachable.");
             }
         }
@@ -139,6 +124,61 @@ public static class ApplicationBuilderExtensions
         app.MapHub<DesignHub>("/ws/design");
 
         return app;
+    }
+
+    /// <summary>
+    /// Apply idempotent schema upgrades for columns that changed type or were added
+    /// after the initial table creation. PostgreSQL-only (uses information_schema).
+    /// </summary>
+    private static void ApplyDatabaseUpgrades(LiuvisDbContext db, ILogger logger)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw("""
+                DO $$
+                BEGIN
+                    -- 1. llm_providers: add SystemPrompt column (new since entity refactor)
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'llm_providers' AND column_name = 'SystemPrompt'
+                    ) THEN
+                        ALTER TABLE llm_providers ADD COLUMN "SystemPrompt" text;
+                    END IF;
+
+                    -- 2. app_settings.Value: varchar(4096) → text (removed MaxLength)
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'app_settings' AND column_name = 'Value'
+                          AND data_type = 'character varying' AND character_maximum_length = 4096
+                    ) THEN
+                        ALTER TABLE app_settings ALTER COLUMN "Value" TYPE text;
+                    END IF;
+
+                    -- 3. knowledge_entries.Description: varchar(4096) → text
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'knowledge_entries' AND column_name = 'Description'
+                          AND data_type = 'character varying' AND character_maximum_length = 4096
+                    ) THEN
+                        ALTER TABLE knowledge_entries ALTER COLUMN "Description" TYPE text;
+                    END IF;
+
+                    -- 4. models.Description: varchar(4096) → text
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'models' AND column_name = 'Description'
+                          AND data_type = 'character varying' AND character_maximum_length = 4096
+                    ) THEN
+                        ALTER TABLE models ALTER COLUMN "Description" TYPE text;
+                    END IF;
+                END $$;
+                """);
+            logger.LogInformation("Database schema upgrades applied successfully");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Database schema upgrades skipped (table may not exist yet)");
+        }
     }
 
     private static void SeedSettingsFromConfig(LiuvisDbContext db, IConfiguration config, ILogger logger)

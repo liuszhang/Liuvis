@@ -34,6 +34,11 @@ public class LlmProvider
     [MaxLength(128)]
     public string? OllamaModel { get; set; }
 
+    /// <summary>
+    /// Agent 系统提示词（System Prompt）。PostgreSQL 中映射为 text 类型，无长度限制。
+    /// </summary>
+    public string? SystemPrompt { get; set; }
+
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

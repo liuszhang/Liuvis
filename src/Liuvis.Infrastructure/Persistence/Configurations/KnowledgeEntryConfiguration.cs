@@ -13,7 +13,7 @@ public class KnowledgeEntryConfiguration : IEntityTypeConfiguration<KnowledgeEnt
         builder.HasKey(e => e.EntryId);
         builder.Property(e => e.EntryId).ValueGeneratedOnAdd();
         builder.Property(e => e.Category).IsRequired().HasMaxLength(256);
-        builder.Property(e => e.Description).HasMaxLength(4096);
+        builder.Property(e => e.Description);
         builder.Property(e => e.Embedding)
             .HasColumnType("jsonb")
             .HasConversion(

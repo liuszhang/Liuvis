@@ -102,7 +102,7 @@ public class LiuvisDbContext : DbContext
             entity.ToTable("app_settings");
             entity.HasKey(e => e.Key);
             entity.Property(e => e.Key).HasMaxLength(128);
-            entity.Property(e => e.Value).HasMaxLength(4096);
+            entity.Property(e => e.Value);
             entity.Property(e => e.Description).HasMaxLength(256);
         });
 

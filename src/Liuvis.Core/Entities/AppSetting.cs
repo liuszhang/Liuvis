@@ -10,7 +10,6 @@ public class AppSetting
     [MaxLength(128)]
     public string Key { get; set; } = string.Empty;
 
-    [MaxLength(4096)]
     public string Value { get; set; } = string.Empty;
 
     [MaxLength(256)]
