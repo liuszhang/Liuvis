@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Liuvis.Core\Liuvis.Core.csproj" />
+    <ProjectReference Include="..\Modules\Liuvis.Modules.Settings.Model\Liuvis.Modules.Settings.Model.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Modules\Data\CJCore.Modules.Data.Model\CJCore.Modules.Data.Model.csproj" />
   </ItemGroup>
 
 </Project>

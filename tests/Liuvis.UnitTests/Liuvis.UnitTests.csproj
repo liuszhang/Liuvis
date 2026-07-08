@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Liuvis.Core\Liuvis.Core.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Liuvis.Modules.Settings.Model\Liuvis.Modules.Settings.Model.csproj" />
     <ProjectReference Include="..\..\src\Liuvis.NLU\Liuvis.NLU.csproj" />
     <ProjectReference Include="..\..\src\Liuvis.Design\Liuvis.Design.csproj" />
     <ProjectReference Include="..\..\src\Liuvis.Generation\Liuvis.Generation.csproj" />

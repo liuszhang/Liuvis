@@ -49,11 +49,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<KnowledgeEntryRepository>();
 
         // -------------------------------------------------------------------------
-        // Settings Service — DB-backed (app_settings table)
-        // -------------------------------------------------------------------------
-        services.AddSingleton<ISettingsService, SettingsService>();
-
-        // -------------------------------------------------------------------------
         // LLM Client — provider switching based on settings cached from DB.
         // SettingsService.PreloadFromDb must be called at startup before first resolution.
         // -------------------------------------------------------------------------

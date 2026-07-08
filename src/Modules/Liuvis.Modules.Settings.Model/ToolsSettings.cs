@@ -1,4 +1,4 @@
-namespace Liuvis.Core.Interfaces;
+namespace Liuvis.Modules.Settings;
 
 /// <summary>Configuration for an MCP Server endpoint.</summary>
 public class McpServerConfig

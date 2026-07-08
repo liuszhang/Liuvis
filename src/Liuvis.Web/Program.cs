@@ -8,6 +8,7 @@ using Liuvis.Web.Components;
 using CJCore.Framework.Api;
 using CJCore.Framework.Abstractions;
 using Liuvis.Web.Services;
+using Liuvis.Modules.Settings.Api;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -119,14 +120,20 @@ try
     builder.Services.AddHttpClient();
 
     // -------------------------------------------------------------------------
-    // 10. Application Services
+    // 10. Settings 模块（后端 API + 服务注册）
+    // -------------------------------------------------------------------------
+    builder.Services.AddLiuvisSettingsApi();
+
+    // -------------------------------------------------------------------------
+    // 11. Application Services
     // -------------------------------------------------------------------------
     builder.Services.AddLiuvisApplicationServices(builder.Configuration);
 
     // -------------------------------------------------------------------------
-    // 11. Liuvis 模块注册（菜单 + 程序集发现）
+    // 12. Liuvis 模块注册（菜单 + 程序集发现）
     // -------------------------------------------------------------------------
     builder.Services.AddSingleton<IModule, LiuvisModule>();
+    builder.Services.AddSingleton<IModule, Liuvis.Modules.Settings.UI.LiuvisSettingsModule>();
     builder.Services.AddSingleton<IMenuService, LiuvisMenuService>();
 
     var app = builder.Build();
@@ -135,6 +142,9 @@ try
     // Pipeline
     // -------------------------------------------------------------------------
     app.ConfigureLiuvisPipeline();
+
+    // 映射 Settings 模块 Minimal API 端点
+    app.MapLiuvisSettingsApi();
 
     Log.Information("Liuvis starting up...");
     Log.Information("Listening on {Urls}", string.Join(", ", app.Urls));

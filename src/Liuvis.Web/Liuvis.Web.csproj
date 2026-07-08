@@ -34,6 +34,8 @@
     <ProjectReference Include="..\Liuvis.Generation\Liuvis.Generation.csproj" />
     <ProjectReference Include="..\Liuvis.Modification\Liuvis.Modification.csproj" />
     <ProjectReference Include="..\Liuvis.KnowledgeBase\Liuvis.KnowledgeBase.csproj" />
+    <ProjectReference Include="..\Modules\Liuvis.Modules.Settings.UI\Liuvis.Modules.Settings.UI.csproj" />
+    <ProjectReference Include="..\Modules\Liuvis.Modules.Settings.Api\Liuvis.Modules.Settings.Api.csproj" />
     <ProjectReference Include="..\..\..\CJCore\src\Framework\CJCore.Framework\CJCore.Framework.csproj" />
   </ItemGroup>
 

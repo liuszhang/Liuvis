@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Liuvis.Core.Entities;
+using Liuvis.Modules.Settings;
 using Liuvis.Infrastructure.Services;
 using Liuvis.Web.Hubs;
 using Liuvis.Web.Middleware;
@@ -146,7 +147,7 @@ public static class ApplicationBuilderExtensions
         var genSection = config.GetSection("Liuvis:Generation");
         if (genSection.Exists() && !db.AppSettings.Any(s => s.Key == "generation_settings"))
         {
-            var genSettings = genSection.Get<Core.Interfaces.GenerationSettings>();
+            var genSettings = genSection.Get<GenerationSettings>();
             if (genSettings is not null)
             {
                 var json = JsonSerializer.Serialize(genSettings, new JsonSerializerOptions
@@ -160,7 +161,7 @@ public static class ApplicationBuilderExtensions
         }
 
         // Migrate existing llm_settings from app_settings into llm_providers table
-        if (!db.LlmProviders.Any())
+        if (!db.Set<LlmProvider>().Any())
         {
             // Try to migrate from legacy app_settings
             var legacyEntity = db.AppSettings.Find("llm_settings");
@@ -168,7 +169,7 @@ public static class ApplicationBuilderExtensions
             {
                 try
                 {
-                    var legacy = JsonSerializer.Deserialize<Core.Interfaces.LlmSettings>(legacyEntity.Value,
+                    var legacy = JsonSerializer.Deserialize<LlmSettings>(legacyEntity.Value,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                     if (legacy is not null)
                     {
@@ -184,7 +185,7 @@ public static class ApplicationBuilderExtensions
                             IsActive = true,
                             CreatedAt = DateTime.UtcNow
                         };
-                        db.LlmProviders.Add(provider);
+                        db.Set<LlmProvider>().Add(provider);
                         db.SaveChanges();
                         logger.LogInformation("Migrated llm_settings from app_settings into llm_providers");
                     }
@@ -196,15 +197,15 @@ public static class ApplicationBuilderExtensions
             }
 
             // Fallback: seed from appsettings.json if migration didn't produce a provider
-            if (!db.LlmProviders.Any())
+            if (!db.Set<LlmProvider>().Any())
             {
                 var llmSection = config.GetSection("Liuvis:Llm");
                 if (llmSection.Exists())
                 {
-                    var llmSettings = llmSection.Get<Core.Interfaces.LlmSettings>();
+                    var llmSettings = llmSection.Get<LlmSettings>();
                     if (llmSettings is not null)
                     {
-                        db.LlmProviders.Add(new LlmProvider
+                        db.Set<LlmProvider>().Add(new LlmProvider
                         {
                             Name = "Default",
                             Provider = llmSettings.Provider,

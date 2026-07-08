@@ -2,6 +2,7 @@ using Xunit;
 using FluentAssertions;
 using Moq;
 using Liuvis.Core.Interfaces;
+using Liuvis.Modules.Settings;
 using Liuvis.NLU.Services;
 using Microsoft.Extensions.Logging;
 

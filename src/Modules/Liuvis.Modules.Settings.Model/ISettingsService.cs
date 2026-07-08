@@ -1,6 +1,4 @@
-using Liuvis.Core.Entities;
-
-namespace Liuvis.Core.Interfaces;
+namespace Liuvis.Modules.Settings;
 
 /// <summary>Settings service backed by the app_settings and llm_providers database tables.</summary>
 public interface ISettingsService
@@ -26,31 +24,4 @@ public interface ISettingsService
     // Tools & Skills management
     Task<ToolsSettings> GetToolsSettingsAsync(CancellationToken ct = default);
     Task SaveToolsSettingsAsync(ToolsSettings settings, CancellationToken ct = default);
-}
-
-public class LlmSettings
-{
-    public string Provider { get; set; } = "openai";
-    public string OllamaUrl { get; set; } = "http://localhost:11434";
-    public string OllamaModel { get; set; } = "qwen3:4b";
-    public string? OpenAIApiKey { get; set; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("openAIBaseUrl")]
-    public string OpenAIBaseUrl { get; set; } = "https://api.deepseek.com";
-
-    public string? OpenAIModel { get; set; } = "deepseek-v4-pro";
-}
-
-public class GenerationSettings
-{
-    public string Mode { get; set; } = "llm";
-
-    // MCP Tool settings
-    public string? McpServerUrl { get; set; } = "http://localhost:8080";
-    public string? McpToolName { get; set; }
-    public string? McpApiKey { get; set; }
-
-    // Fake model settings
-    public string FakeModelType { get; set; } = "box";
-    public int FakeModelCount { get; set; } = 3;
 }

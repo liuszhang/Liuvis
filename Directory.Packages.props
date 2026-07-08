@@ -4,7 +4,8 @@
     <EfCoreVersion>10.0.0</EfCoreVersion>
   </PropertyGroup>
   <ItemGroup>
-    <!-- ASP.NET Core (framework reference, no package version needed for Microsoft.AspNetCore.App) -->
+    <!-- ASP.NET Core -->
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.9" />
     <!-- EF Core -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />

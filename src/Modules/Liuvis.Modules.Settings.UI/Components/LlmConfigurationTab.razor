@@ -1,0 +1,247 @@
+<div style="overflow-y: auto; max-height: calc(100vh - 260px); padding-right: 4px;">
+<MudCard Elevation="0" Class="mt-4">
+    <MudCardContent>
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
+            <MudText Typo="Typo.h6">AI Language Model Providers</MudText>
+            @if (_activeProvider is not null)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                    Active: @_activeProvider.Name
+                </MudChip>
+            }
+        </div>
+
+        @* --- Provider List --- *@
+        <MudTable Items="_providers" Hover="true" Dense="true" Elevation="0"
+            Loading="_isLoadingProviders" Striped="true">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Provider</MudTh>
+                <MudTh>Model</MudTh>
+                <MudTh>Base URL</MudTh>
+                <MudTh Style="text-align:right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        @if (context.IsActive)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                        }
+                        <MudText>@context.Name</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Provider">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                        @context.Provider
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Model">@(context.Provider == "ollama" ? context.OllamaModel : context.Model)</MudTd>
+                <MudTd DataLabel="Base URL">
+                    @(context.Provider == "ollama" ? context.OllamaUrl : context.BaseUrl)
+                </MudTd>
+                <MudTd Style="text-align:right">
+                    <MudButtonGroup Size="Size.Small" Variant="Variant.Text">
+                        @if (!context.IsActive)
+                        {
+                            <MudButton Color="Color.Primary" OnClick="@(() => ActivateProviderAsync(context))"
+                                StartIcon="@Icons.Material.Filled.PlayArrow">Activate</MudButton>
+                        }
+                        <MudButton Color="Color.Default" OnClick="@(() => EditProviderAsync(context))"
+                            StartIcon="@Icons.Material.Filled.Edit">Edit</MudButton>
+                        <MudButton Color="Color.Error" OnClick="@(() => DeleteProviderAsync(context))"
+                            StartIcon="@Icons.Material.Filled.Delete">Delete</MudButton>
+                    </MudButtonGroup>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4 mud-text-secondary">No providers configured. Click "Add Provider" to get started.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-4"
+            OnClick="AddProviderAsync" StartIcon="@Icons.Material.Filled.Add">
+            Add Provider
+        </MudButton>
+    </MudCardContent>
+</MudCard>
+
+@* --- Edit / Add Dialog --- *@
+@if (_editDialogOpen)
+{
+    <MudCard Elevation="2" Class="mt-4">
+        <MudCardContent>
+            <MudText Typo="Typo.h6" Class="mb-4">
+                @(_editingProvider.Id == 0 ? "Add New Provider" : $"Edit: {_editingProvider.Name}")
+            </MudText>
+
+            <MudStack Spacing="4">
+                <MudTextField @bind-Value="_editingProvider.Name" Label="Name"
+                    HelperText="A descriptive name for this provider"
+                    Variant="Variant.Outlined" Required="true" />
+
+                <div>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Connection Mode</MudText>
+                    <MudToggleGroup @bind-Value="_editingProvider.Provider" T="string"
+                        SelectionMode="SelectionMode.SingleSelection">
+                        <MudToggleItem T="string" Value="@("ollama")">
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Small" />
+                                <MudText>Local Ollama</MudText>
+                            </MudStack>
+                        </MudToggleItem>
+                        <MudToggleItem T="string" Value="@("openai")">
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Cloud" Size="Size.Small" />
+                                <MudText>Custom API Key</MudText>
+                            </MudStack>
+                        </MudToggleItem>
+                    </MudToggleGroup>
+                </div>
+
+                @if (_editingProvider.Provider == "ollama")
+                {
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" md="8">
+                            <MudTextField @bind-Value="_editingProvider.OllamaUrl" Label="URL"
+                                HelperText="e.g. http://localhost:11434" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_editingProvider.OllamaModel" Label="Model"
+                                HelperText="e.g. qwen3:4b" Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                }
+                else
+                {
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_editingProvider.ApiKey" Label="API Key"
+                                HelperText="sk-..." Variant="Variant.Outlined"
+                                InputType="@(_showEditApiKey ? InputType.Text : InputType.Password)"
+                                Adornment="Adornment.End"
+                                AdornmentIcon="@(_showEditApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                OnAdornmentClick="() => _showEditApiKey = !_showEditApiKey" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_editingProvider.BaseUrl" Label="Base URL"
+                                HelperText="e.g. https://api.deepseek.com" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_editingProvider.Model" Label="Model"
+                                HelperText="e.g. deepseek-v4-pro" Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                }
+
+            </MudStack>
+        </MudCardContent>
+
+        <MudCardActions Class="pa-4">
+            <MudSpacer />
+            <MudButton Variant="Variant.Text" OnClick="CancelEdit" Class="mr-2">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                OnClick="SaveProviderAsync" Disabled="_savingProvider"
+                StartIcon="@Icons.Material.Filled.Save">
+                @if (_savingProvider) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                Save
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+}
+</div>
+
+@code {
+    [Inject] private ISettingsService SettingsService { get; set; } = default!;
+    [Inject] private ILogger<LlmConfigurationTab> Logger { get; set; } = default!;
+
+    private List<LlmProvider> _providers = new();
+    private LlmProvider? _activeProvider;
+    private bool _isLoadingProviders = true;
+
+    private LlmProvider _editingProvider = new() { Provider = "openai" };
+    private bool _editDialogOpen;
+    private bool _savingProvider;
+    private bool _showEditApiKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _providers = await SettingsService.GetProvidersAsync();
+            _activeProvider = _providers.FirstOrDefault(p => p.IsActive);
+            _isLoadingProviders = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[LlmConfigurationTab] LoadData FAILED");
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _providers = await SettingsService.GetProvidersAsync();
+        _activeProvider = _providers.FirstOrDefault(p => p.IsActive);
+    }
+
+    private void AddProviderAsync()
+    {
+        _editingProvider = new LlmProvider { Provider = "openai" };
+        _editDialogOpen = true;
+        _showEditApiKey = false;
+    }
+
+    private void EditProviderAsync(LlmProvider provider)
+    {
+        _editingProvider = new LlmProvider
+        {
+            Id = provider.Id,
+            Name = provider.Name,
+            Provider = provider.Provider,
+            ApiKey = provider.ApiKey,
+            BaseUrl = provider.BaseUrl,
+            Model = provider.Model,
+            OllamaUrl = provider.OllamaUrl,
+            OllamaModel = provider.OllamaModel,
+            IsActive = provider.IsActive
+        };
+        _editDialogOpen = true;
+        _showEditApiKey = false;
+    }
+
+    private void CancelEdit()
+    {
+        _editDialogOpen = false;
+    }
+
+    private async Task SaveProviderAsync()
+    {
+        _savingProvider = true;
+        try
+        {
+            if (_editingProvider.Id == 0)
+                await SettingsService.AddProviderAsync(_editingProvider);
+            else
+                await SettingsService.UpdateProviderAsync(_editingProvider);
+
+            _editDialogOpen = false;
+            await LoadDataAsync();
+        }
+        finally
+        {
+            _savingProvider = false;
+        }
+    }
+
+    private async Task DeleteProviderAsync(LlmProvider provider)
+    {
+        await SettingsService.DeleteProviderAsync(provider.Id);
+        await LoadDataAsync();
+    }
+
+    private async Task ActivateProviderAsync(LlmProvider provider)
+    {
+        await SettingsService.ActivateProviderAsync(provider.Id);
+        await LoadDataAsync();
+    }
+}

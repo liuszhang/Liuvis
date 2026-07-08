@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Liuvis.Core.Entities;
+namespace Liuvis.Modules.Settings;
 
 /// <summary>
 /// Represents a saved LLM provider configuration.

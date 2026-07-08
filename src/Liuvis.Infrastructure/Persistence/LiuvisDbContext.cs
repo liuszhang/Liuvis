@@ -1,12 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Liuvis.Core.Entities;
+using CJCore.Modules.Data;
 
 namespace Liuvis.Infrastructure.Persistence;
 
 /// <summary>EF Core database context for Liuvis with pgvector support.</summary>
 public class LiuvisDbContext : DbContext
 {
+    private readonly IEnumerable<IModuleDbConfig> _moduleDbConfigs;
+
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<SessionMessage> SessionMessages => Set<SessionMessage>();
     public DbSet<Model3D> Models => Set<Model3D>();
@@ -14,15 +17,23 @@ public class LiuvisDbContext : DbContext
     public DbSet<KnowledgeEntry> KnowledgeEntries => Set<KnowledgeEntry>();
     public DbSet<DesignSnapshot> DesignSnapshots => Set<DesignSnapshot>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
-    public DbSet<LlmProvider> LlmProviders => Set<LlmProvider>();
 
-    public LiuvisDbContext(DbContextOptions<LiuvisDbContext> options) : base(options)
+    public LiuvisDbContext(
+        DbContextOptions<LiuvisDbContext> options,
+        IEnumerable<IModuleDbConfig> moduleDbConfigs) : base(options)
     {
+        _moduleDbConfigs = moduleDbConfigs;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // 1. 各模块 IModuleDbConfig — AddDbSets
+        foreach (var config in _moduleDbConfigs)
+        {
+            config.AddDbSets(modelBuilder);
+        }
 
         modelBuilder.ApplyConfiguration(new Configurations.SessionConfiguration());
         modelBuilder.ApplyConfiguration(new Configurations.Model3DConfiguration());
@@ -95,13 +106,10 @@ public class LiuvisDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(256);
         });
 
-        // LlmProvider
-        modelBuilder.Entity<LlmProvider>(entity =>
+        // 2. 各模块 IModuleDbConfig — ConfigEntities
+        foreach (var config in _moduleDbConfigs)
         {
-            entity.ToTable("llm_providers");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(128);
-            entity.Property(e => e.Provider).IsRequired().HasMaxLength(32);
-        });
+            config.ConfigEntities(modelBuilder);
+        }
     }
 }

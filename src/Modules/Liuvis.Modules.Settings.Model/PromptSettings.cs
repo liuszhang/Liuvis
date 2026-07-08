@@ -1,4 +1,4 @@
-namespace Liuvis.Core.Interfaces;
+namespace Liuvis.Modules.Settings;
 
 /// <summary>Stores all configurable LLM system prompt templates.</summary>
 public class PromptSettings

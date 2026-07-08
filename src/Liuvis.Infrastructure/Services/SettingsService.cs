@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Liuvis.Core.Entities;
-using Liuvis.Core.Interfaces;
+using Liuvis.Modules.Settings;
 using Liuvis.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,7 +33,7 @@ public class SettingsService : ISettingsService
             using var scope = serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
 
-            var activeProvider = db.LlmProviders.FirstOrDefault(p => p.IsActive);
+            var activeProvider = db.Set<LlmProvider>().FirstOrDefault(p => p.IsActive);
             if (activeProvider is not null)
             {
                 var settings = MapToLlmSettings(activeProvider);
@@ -68,7 +68,7 @@ public class SettingsService : ISettingsService
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
-        var activeProvider = await db.LlmProviders.FirstOrDefaultAsync(p => p.IsActive, ct);
+        var activeProvider = await db.Set<LlmProvider>().FirstOrDefaultAsync(p => p.IsActive, ct);
 
         if (activeProvider is null)
             return new LlmSettings();
@@ -86,7 +86,7 @@ public class SettingsService : ISettingsService
             await using var scope = _serviceProvider.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
 
-            var activeProvider = await db.LlmProviders.FirstOrDefaultAsync(p => p.IsActive, ct);
+            var activeProvider = await db.Set<LlmProvider>().FirstOrDefaultAsync(p => p.IsActive, ct);
             if (activeProvider is not null)
             {
                 MapFromLlmSettings(settings, activeProvider);
@@ -100,7 +100,7 @@ public class SettingsService : ISettingsService
                     CreatedAt = DateTime.UtcNow
                 };
                 MapFromLlmSettings(settings, activeProvider);
-                db.LlmProviders.Add(activeProvider);
+                db.Set<LlmProvider>().Add(activeProvider);
             }
 
             await db.SaveChangesAsync(ct);
@@ -138,14 +138,14 @@ public class SettingsService : ISettingsService
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
-        return await db.LlmProviders.OrderBy(p => p.Name).ToListAsync(ct);
+        return await db.Set<LlmProvider>().OrderBy(p => p.Name).ToListAsync(ct);
     }
 
     public async Task<LlmProvider?> GetActiveProviderAsync(CancellationToken ct = default)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
-        return await db.LlmProviders.FirstOrDefaultAsync(p => p.IsActive, ct);
+        return await db.Set<LlmProvider>().FirstOrDefaultAsync(p => p.IsActive, ct);
     }
 
     public async Task<LlmProvider> AddProviderAsync(LlmProvider provider, CancellationToken ct = default)
@@ -159,10 +159,10 @@ public class SettingsService : ISettingsService
             provider.CreatedAt = DateTime.UtcNow;
 
             // If this is the first provider, make it active
-            if (!await db.LlmProviders.AnyAsync(ct))
+            if (!await db.Set<LlmProvider>().AnyAsync(ct))
                 provider.IsActive = true;
 
-            db.LlmProviders.Add(provider);
+            db.Set<LlmProvider>().Add(provider);
             await db.SaveChangesAsync(ct);
 
             if (provider.IsActive)
@@ -184,7 +184,7 @@ public class SettingsService : ISettingsService
             await using var scope = _serviceProvider.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
 
-            var existing = await db.LlmProviders.FindAsync([provider.Id], ct)
+            var existing = await db.Set<LlmProvider>().FindAsync([provider.Id], ct)
                 ?? throw new InvalidOperationException($"Provider {provider.Id} not found");
 
             existing.Name = provider.Name;
@@ -214,17 +214,17 @@ public class SettingsService : ISettingsService
             await using var scope = _serviceProvider.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
 
-            var provider = await db.LlmProviders.FindAsync([id], ct)
+            var provider = await db.Set<LlmProvider>().FindAsync([id], ct)
                 ?? throw new InvalidOperationException($"Provider {id} not found");
 
             bool wasActive = provider.IsActive;
-            db.LlmProviders.Remove(provider);
+            db.Set<LlmProvider>().Remove(provider);
             await db.SaveChangesAsync(ct);
 
             // If deleted provider was active, activate the first remaining one
             if (wasActive)
             {
-                var next = await db.LlmProviders.FirstOrDefaultAsync(ct);
+                var next = await db.Set<LlmProvider>().FirstOrDefaultAsync(ct);
                 if (next is not null)
                 {
                     next.IsActive = true;
@@ -251,11 +251,11 @@ public class SettingsService : ISettingsService
             await using var scope = _serviceProvider.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LiuvisDbContext>();
 
-            var provider = await db.LlmProviders.FindAsync([id], ct)
+            var provider = await db.Set<LlmProvider>().FindAsync([id], ct)
                 ?? throw new InvalidOperationException($"Provider {id} not found");
 
             // Deactivate all others
-            var all = await db.LlmProviders.ToListAsync(ct);
+            var all = await db.Set<LlmProvider>().ToListAsync(ct);
             foreach (var p in all)
                 p.IsActive = (p.Id == id);
 
