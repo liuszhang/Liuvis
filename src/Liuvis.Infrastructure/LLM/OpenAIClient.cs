@@ -18,8 +18,6 @@ public class OpenAIClient : ILlmClient
     private readonly string _baseUrl;
     private readonly string _model;
     private readonly string _embeddingModel;
-    private readonly int _maxTokens;
-    private readonly double _temperature;
     private readonly ILogger<OpenAIClient> _logger;
     private global::OpenAI.OpenAIClient? _openAiClient;
 
@@ -28,16 +26,12 @@ public class OpenAIClient : ILlmClient
         string baseUrl,
         string model,
         string embeddingModel,
-        int maxTokens,
-        double temperature,
         ILogger<OpenAIClient> logger)
     {
         _apiKey = apiKey;
         _baseUrl = NormalizeEndpoint(baseUrl);
         _model = model;
         _embeddingModel = embeddingModel;
-        _maxTokens = maxTokens;
-        _temperature = temperature;
         _logger = logger;
     }
 
@@ -81,12 +75,7 @@ public class OpenAIClient : ILlmClient
         var chatClient = Client.GetChatClient(_model);
         var response = await chatClient.CompleteChatAsync(
             messages,
-            new ChatCompletionOptions
-            {
-                MaxOutputTokenCount = _maxTokens,
-                Temperature = (float)_temperature,
-            },
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         var content = response.Value.Content.FirstOrDefault()?.Text ?? string.Empty;
         return content;
@@ -102,12 +91,7 @@ public class OpenAIClient : ILlmClient
         var chatClient = Client.GetChatClient(_model);
         var updates = chatClient.CompleteChatStreamingAsync(
             messages,
-            new ChatCompletionOptions
-            {
-                MaxOutputTokenCount = _maxTokens,
-                Temperature = (float)_temperature,
-            },
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         await foreach (var update in updates.WithCancellation(cancellationToken))
         {
@@ -182,9 +166,7 @@ public class OpenAIClient : ILlmClient
         {
             model = _model,
             messages,
-            stream = true,
-            max_tokens = _maxTokens,
-            temperature = _temperature
+            stream = true
         };
 
         var json = JsonSerializer.Serialize(payload);

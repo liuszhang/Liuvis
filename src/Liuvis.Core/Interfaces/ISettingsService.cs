@@ -39,15 +39,6 @@ public class LlmSettings
     public string OpenAIBaseUrl { get; set; } = "https://api.deepseek.com";
 
     public string? OpenAIModel { get; set; } = "deepseek-v4-pro";
-    public int MaxTokens { get; set; } = 2000;
-    public double Temperature { get; set; } = 0.3;
-
-    [System.Text.Json.Serialization.JsonIgnore]
-    public double TemperatureValue
-    {
-        get => Temperature;
-        set => Temperature = Math.Round(value, 1);
-    }
 }
 
 public class GenerationSettings

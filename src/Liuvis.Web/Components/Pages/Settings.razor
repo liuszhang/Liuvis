@@ -15,6 +15,7 @@
 
 <MudTabs Elevation="0" Class="px-4">
     <MudTabPanel Text="LLM Configuration">
+        <div style="overflow-y: auto; max-height: calc(100vh - 260px); padding-right: 4px;">
         <MudCard Elevation="0" Class="mt-4">
             <MudCardContent>
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
@@ -150,19 +151,6 @@
                             </MudGrid>
                         }
 
-                        <MudDivider />
-
-                        <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">Generation Parameters</MudText>
-                        <MudGrid Spacing="3">
-                            <MudItem xs="6" md="3">
-                                <MudNumericField @bind-Value="_editingProvider.MaxTokens" Label="Max Tokens"
-                                    Variant="Variant.Outlined" Min="100" Max="32000" Step="100" />
-                            </MudItem>
-                            <MudItem xs="6" md="3">
-                                <MudNumericField @bind-Value="_editingProvider.Temperature" Label="Temperature"
-                                    Variant="Variant.Outlined" Min="0.0" Max="2.0" Step="0.1" Format="F1" />
-                            </MudItem>
-                        </MudGrid>
                     </MudStack>
                 </MudCardContent>
 
@@ -178,6 +166,7 @@
                 </MudCardActions>
             </MudCard>
         }
+        </div>
     </MudTabPanel>
 
     <MudTabPanel Text="General">
@@ -294,6 +283,7 @@
     </MudTabPanel>
 
     <MudTabPanel Text="LLM Prompts">
+        <div style="overflow-y: auto; max-height: calc(100vh - 260px); padding-right: 4px;">
         <MudCard Elevation="0" Class="mt-4">
             <MudCardContent>
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
@@ -376,6 +366,7 @@
                 </MudButton>
             </MudCardActions>
         </MudCard>
+        </div>
     </MudTabPanel>
 
     <MudTabPanel Text="工具与技能">
@@ -524,7 +515,7 @@
 
     private void AddProviderAsync()
     {
-        _editingProvider = new LlmProvider { Provider = "openai", MaxTokens = 2000, Temperature = 0.3 };
+        _editingProvider = new LlmProvider { Provider = "openai" };
         _editDialogOpen = true;
         _showEditApiKey = false;
     }
@@ -541,8 +532,6 @@
             Model = provider.Model,
             OllamaUrl = provider.OllamaUrl,
             OllamaModel = provider.OllamaModel,
-            MaxTokens = provider.MaxTokens,
-            Temperature = provider.Temperature,
             IsActive = provider.IsActive
         };
         _editDialogOpen = true;

@@ -181,8 +181,6 @@ public static class ApplicationBuilderExtensions
                             Model = legacy.OpenAIModel,
                             OllamaUrl = legacy.OllamaUrl,
                             OllamaModel = legacy.OllamaModel,
-                            MaxTokens = legacy.MaxTokens,
-                            Temperature = legacy.Temperature,
                             IsActive = true,
                             CreatedAt = DateTime.UtcNow
                         };
@@ -215,8 +213,6 @@ public static class ApplicationBuilderExtensions
                             Model = llmSettings.OpenAIModel,
                             OllamaUrl = llmSettings.OllamaUrl,
                             OllamaModel = llmSettings.OllamaModel,
-                            MaxTokens = llmSettings.MaxTokens,
-                            Temperature = llmSettings.Temperature,
                             IsActive = true,
                             CreatedAt = DateTime.UtcNow
                         });

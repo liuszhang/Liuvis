@@ -80,8 +80,6 @@ public static class ServiceCollectionExtensions
                     baseUrl: settings.OpenAIBaseUrl,
                     model: model,
                     embeddingModel: "text-embedding-3-small",
-                    maxTokens: settings.MaxTokens,
-                    temperature: settings.Temperature,
                     logger: openAiLogger);
             }
 

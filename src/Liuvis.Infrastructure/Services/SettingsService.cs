@@ -194,8 +194,6 @@ public class SettingsService : ISettingsService
             existing.Model = provider.Model;
             existing.OllamaUrl = provider.OllamaUrl;
             existing.OllamaModel = provider.OllamaModel;
-            existing.MaxTokens = provider.MaxTokens;
-            existing.Temperature = provider.Temperature;
 
             await db.SaveChangesAsync(ct);
 
@@ -279,9 +277,7 @@ public class SettingsService : ISettingsService
             OpenAIBaseUrl = p.BaseUrl ?? "https://api.deepseek.com",
             OpenAIModel = p.Model,
             OllamaUrl = p.OllamaUrl ?? "http://localhost:11434",
-            OllamaModel = p.OllamaModel ?? "qwen3:4b",
-            MaxTokens = p.MaxTokens,
-            Temperature = p.Temperature
+            OllamaModel = p.OllamaModel ?? "qwen3:4b"
         };
     }
 
@@ -293,8 +289,6 @@ public class SettingsService : ISettingsService
         p.Model = s.OpenAIModel;
         p.OllamaUrl = s.OllamaUrl;
         p.OllamaModel = s.OllamaModel;
-        p.MaxTokens = s.MaxTokens;
-        p.Temperature = s.Temperature;
     }
 
     private static void RefreshCache(LlmProvider provider)

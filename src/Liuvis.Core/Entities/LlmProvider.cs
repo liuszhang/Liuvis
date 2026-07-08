@@ -34,10 +34,6 @@ public class LlmProvider
     [MaxLength(128)]
     public string? OllamaModel { get; set; }
 
-    public int MaxTokens { get; set; } = 2000;
-
-    public double Temperature { get; set; } = 0.3;
-
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
