@@ -15,6 +15,7 @@
     <ProjectReference Include="..\Liuvis.Core\Liuvis.Core.csproj" />
     <ProjectReference Include="..\Liuvis.Infrastructure\Liuvis.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\Liuvis.Modules.Settings.Model\Liuvis.Modules.Settings.Model.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Framework\CJCore.Framework.Abstractions\CJCore.Framework.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

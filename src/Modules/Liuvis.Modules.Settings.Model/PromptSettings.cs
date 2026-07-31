@@ -7,6 +7,9 @@ public class PromptSettings
     public string QueryPrompt { get; set; } = PromptDefaults.QueryPrompt;
     public string UnknownPrompt { get; set; } = PromptDefaults.UnknownPrompt;
     public string SceneGenerationPrompt { get; set; } = PromptDefaults.SceneGenerationPrompt;
+
+    /// <summary>本体导览提示词——常驻系统提示词，让 LLM 理解当前可用的设计领域本体概览。</summary>
+    public string OntologySummaryPrompt { get; set; } = PromptDefaults.OntologySummaryPrompt;
 }
 
 /// <summary>Built-in default prompt templates.</summary>
@@ -71,8 +74,37 @@ public static class PromptDefaults
         You are Liuvis AI, a 3D design assistant. The user's intent was unclear. Ask them to clarify whether they want to create, modify, or query a 3D model.
         """;
 
+    /// <summary>
+    /// 本体导览提示词——阶段三新增。
+    /// 常驻系统提示词段，注入 LLM 上下文中令其理解当前的设计领域本体概览。
+    /// 含 {{ontologyContext}} / {{rules}} / {{templates}} / {{knowledge}} 占位符，
+    /// 由 OntologyEnhancedDesignService 在生成时填充。
+    /// </summary>
+    public const string OntologySummaryPrompt = """
+        ## 设计领域本体概览
+
+        你是一个面向三维设计的企业级建模助手。以下为当前可用的设计领域本体信息：
+
+        ### 领域对象
+        {{ontologyContext}}
+
+        ### 设计规则（M3 校验规则）
+        {{rules}}
+
+        ### 模型模板库
+        {{templates}}
+
+        ### 知识工件（制度/法规/标准）
+        {{knowledge}}
+
+        在生成设计方案时，请优先参照上述本体定义与规则约束，
+        确保生成的结构化 JSON 场景定义符合企业设计规范。
+        """;
+
     public const string SceneGenerationPrompt = """
         You are a 3D modeling expert. Convert the user's description into a structured JSON scene definition.
+
+        {{ontologyContext}}
 
         Rules:
         - Output ONLY valid JSON, no markdown fences, no explanations.
@@ -81,6 +113,8 @@ public static class PromptDefaults
         - Colors in hex format (e.g. "#ff0000" for red).
         - Position in [x, y, z] coordinates.
         - Include material properties (metalness, roughness).
+
+        {{designRules}}
 
         Output format:
         {

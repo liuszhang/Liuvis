@@ -1,7 +1,11 @@
 using System.Text.Json;
+using CJCore.CoreLog;
 using Liuvis.Core.Entities;
+using Liuvis.Core.Interfaces;
 using Liuvis.Modules.Settings;
 using Liuvis.Infrastructure.Services;
+using Liuvis.Agent;
+using Liuvis.KnowledgeBase.Services;
 using Liuvis.Web.Hubs;
 using Liuvis.Web.Middleware;
 using Liuvis.Infrastructure.Persistence;
@@ -122,6 +126,55 @@ public static class ApplicationBuilderExtensions
         // 8. SignalR Hub
         // ---------------------------------------------------------------------
         app.MapHub<DesignHub>("/ws/design");
+
+        // ---------------------------------------------------------------------
+        // 9. Agent 预热 + 本体缓存手动刷新端点
+        // ---------------------------------------------------------------------
+        using (var warmupScope = app.Services.CreateScope())
+        {
+            // 强制构造 ModelingAgent，避免 InProcessAgentChannel 的 Subscribe 懒加载
+            // 导致首条消息发送时订阅者为空而丢失。
+            var agent = warmupScope.ServiceProvider.GetService<ModelingAgent>();
+            if (agent is null)
+                app.Logger.LogWarning("ModelingAgent 未注册，跳过 Agent 预热");
+            else
+                app.Logger.LogInformation("ModelingAgent 预热完成");
+
+            // 阶段五：本体知识工件导入（启动预热）。
+            // CJOntology 不可达时 ImportAsync 内部快速返回 0，不阻塞启动。
+            try
+            {
+                var importer = warmupScope.ServiceProvider.GetService<OntologyKnowledgeImporter>();
+                if (importer is not null)
+                {
+                    var imported = importer.ImportAsync().GetAwaiter().GetResult();
+                    CJLog.Information($"启动预热：本体知识工件导入 {imported} 条", source: "Liuvis.Warmup");
+                }
+            }
+            catch (Exception ex)
+            {
+                CJLog.Warning($"启动预热本体知识导入失败（可稍后通过 /api/admin/ontology/refresh 重试）: {ex.Message}", source: "Liuvis.Warmup");
+            }
+        }
+
+        app.MapGet("/api/admin/ontology/refresh",
+            async (IOntologyContextService svc, OntologyKnowledgeImporter importer, CancellationToken ct) =>
+        {
+            var refreshed = await svc.RefreshAsync(ct);
+
+            // 阶段五：refresh 时同步做知识工件增量导入
+            var imported = 0;
+            try
+            {
+                imported = await importer.ImportAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                CJLog.Error(ex, "refresh 端点本体知识导入失败", source: "OntologyRefresh");
+            }
+
+            return Results.Ok(new { refreshed, imported, at = DateTimeOffset.UtcNow });
+        });
 
         return app;
     }
