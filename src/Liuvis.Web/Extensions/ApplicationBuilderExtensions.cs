@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CJCore.CoreLog;
+using CJCore.Modules.Data;
 using Liuvis.Core.Entities;
 using Liuvis.Core.Interfaces;
 using Liuvis.Modules.Settings;
@@ -73,6 +74,23 @@ public static class ApplicationBuilderExtensions
             {
                 logger.LogWarning(ex, "Database EnsureCreated failed — DB may already exist or be unreachable.");
             }
+        }
+
+        // ---------------------------------------------------------------------
+        // 4.5 CJCore Data (SQLite cjcore_liuvis.db) — create tables + LLM seed.
+        // Liuvis LLM 配置已统一到 CJCore ILLMConfigService；主链路 DI 工厂依赖
+        // 该库的 LLM_LlmProviders / LLM_LlmModelConfigs 表及种子数据（LLMSeedDataProvider）。
+        // ---------------------------------------------------------------------
+        try
+        {
+            app.Services.EnsureDataDbCreatedAsync().GetAwaiter().GetResult();
+            app.Services.RunSeedDataAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            var cjLogger = app.Services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("CJCoreDataInit");
+            cjLogger.LogWarning(ex, "CJCore data DB ensure/seed failed — LLM 配置可能不可用");
         }
 
         // ---------------------------------------------------------------------
@@ -190,15 +208,7 @@ public static class ApplicationBuilderExtensions
             db.Database.ExecuteSqlRaw("""
                 DO $$
                 BEGIN
-                    -- 1. llm_providers: add SystemPrompt column (new since entity refactor)
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'llm_providers' AND column_name = 'SystemPrompt'
-                    ) THEN
-                        ALTER TABLE llm_providers ADD COLUMN "SystemPrompt" text;
-                    END IF;
-
-                    -- 2. app_settings.Value: varchar(4096) → text (removed MaxLength)
+                    -- 1. app_settings.Value: varchar(4096) → text (removed MaxLength)
                     IF EXISTS (
                         SELECT 1 FROM information_schema.columns
                         WHERE table_name = 'app_settings' AND column_name = 'Value'
@@ -207,7 +217,7 @@ public static class ApplicationBuilderExtensions
                         ALTER TABLE app_settings ALTER COLUMN "Value" TYPE text;
                     END IF;
 
-                    -- 3. knowledge_entries.Description: varchar(4096) → text
+                    -- 2. knowledge_entries.Description: varchar(4096) → text
                     IF EXISTS (
                         SELECT 1 FROM information_schema.columns
                         WHERE table_name = 'knowledge_entries' AND column_name = 'Description'
@@ -216,7 +226,7 @@ public static class ApplicationBuilderExtensions
                         ALTER TABLE knowledge_entries ALTER COLUMN "Description" TYPE text;
                     END IF;
 
-                    -- 4. models.Description: varchar(4096) → text
+                    -- 3. models.Description: varchar(4096) → text
                     IF EXISTS (
                         SELECT 1 FROM information_schema.columns
                         WHERE table_name = 'models' AND column_name = 'Description'
@@ -250,70 +260,6 @@ public static class ApplicationBuilderExtensions
                 db.AppSettings.Add(new AppSetting("generation_settings", json, "Generation configuration"));
                 db.SaveChanges();
                 logger.LogInformation("Seeded generation_settings from appsettings.json into database");
-            }
-        }
-
-        // Migrate existing llm_settings from app_settings into llm_providers table
-        if (!db.Set<LlmProvider>().Any())
-        {
-            // Try to migrate from legacy app_settings
-            var legacyEntity = db.AppSettings.Find("llm_settings");
-            if (legacyEntity?.Value is not null)
-            {
-                try
-                {
-                    var legacy = JsonSerializer.Deserialize<LlmSettings>(legacyEntity.Value,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    if (legacy is not null)
-                    {
-                        var provider = new LlmProvider
-                        {
-                            Name = "Migrated",
-                            Provider = legacy.Provider,
-                            ApiKey = legacy.OpenAIApiKey,
-                            BaseUrl = legacy.OpenAIBaseUrl,
-                            Model = legacy.OpenAIModel,
-                            OllamaUrl = legacy.OllamaUrl,
-                            OllamaModel = legacy.OllamaModel,
-                            IsActive = true,
-                            CreatedAt = DateTime.UtcNow
-                        };
-                        db.Set<LlmProvider>().Add(provider);
-                        db.SaveChanges();
-                        logger.LogInformation("Migrated llm_settings from app_settings into llm_providers");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to migrate llm_settings, seeding from appsettings.json");
-                }
-            }
-
-            // Fallback: seed from appsettings.json if migration didn't produce a provider
-            if (!db.Set<LlmProvider>().Any())
-            {
-                var llmSection = config.GetSection("Liuvis:Llm");
-                if (llmSection.Exists())
-                {
-                    var llmSettings = llmSection.Get<LlmSettings>();
-                    if (llmSettings is not null)
-                    {
-                        db.Set<LlmProvider>().Add(new LlmProvider
-                        {
-                            Name = "Default",
-                            Provider = llmSettings.Provider,
-                            ApiKey = llmSettings.OpenAIApiKey,
-                            BaseUrl = llmSettings.OpenAIBaseUrl,
-                            Model = llmSettings.OpenAIModel,
-                            OllamaUrl = llmSettings.OllamaUrl,
-                            OllamaModel = llmSettings.OllamaModel,
-                            IsActive = true,
-                            CreatedAt = DateTime.UtcNow
-                        });
-                        db.SaveChanges();
-                        logger.LogInformation("Seeded default LLM provider from appsettings.json");
-                    }
-                }
             }
         }
     }

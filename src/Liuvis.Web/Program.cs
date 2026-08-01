@@ -9,6 +9,7 @@ using CJCore.Framework.Api;
 using CJCore.Framework.Abstractions;
 using Liuvis.Web.Services;
 using Liuvis.Modules.Settings.Api;
+using CJCore.Modules.LLM;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -145,6 +146,9 @@ try
 
     // 映射 Settings 模块 Minimal API 端点
     app.MapLiuvisSettingsApi();
+
+    // 映射 CJCore LLM 模块 API 端点（/api/llm/*，供 LLMConfigPage 的 ILlmConfigApiClient 调用）
+    app.MapCJCoreLLM();
 
     Log.Information("Liuvis starting up...");
     Log.Information("Listening on {Urls}", string.Join(", ", app.Urls));

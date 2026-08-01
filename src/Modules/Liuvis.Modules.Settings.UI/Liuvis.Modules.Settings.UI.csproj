@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Liuvis.Modules.Settings.Model\Liuvis.Modules.Settings.Model.csproj" />
     <ProjectReference Include="..\..\Liuvis.Core\Liuvis.Core.csproj" />
     <ProjectReference Include="..\..\..\..\CJCore\src\Framework\CJCore.Framework.Abstractions\CJCore.Framework.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\..\CJCore\src\Modules\LLM\CJCore.Modules.LLM.UI\CJCore.Modules.LLM.UI.csproj" />
   </ItemGroup>
 
 </Project>

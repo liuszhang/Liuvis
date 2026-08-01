@@ -19,7 +19,6 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddLiuvisSettingsApi(this IServiceCollection services)
     {
         services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<IModuleDbConfig, SettingsModuleDbConfig>();
         return services;
     }
 

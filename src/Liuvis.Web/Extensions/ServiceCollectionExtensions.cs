@@ -21,6 +21,8 @@ using CJCore.Agent.Abstractions;
 using CJCore.LLM.Abstractions;
 using CJCore.Modules.LLM;
 using CJCore.Modules.Data;
+using CJCore.Modules.LLM.Api.Services;
+using CJCore.Modules.LLM.Model;
 using CJCore.AgentTool.MCPTools;
 using CJCore.AgentTool.Skills;
 using Microsoft.EntityFrameworkCore;
@@ -58,45 +60,50 @@ public static class ServiceCollectionExtensions
         services.AddScoped<KnowledgeEntryRepository>();
 
         // -------------------------------------------------------------------------
-        // LLM Client — provider switching based on settings cached from DB.
-        // SettingsService.PreloadFromDb must be called at startup before first resolution.
+        // LLM Client — provider/model resolved from CJCore ILLMConfigService
+        // (SQLite cjcore_liuvis.db, managed via LLMConfigPage / api/llm/*).
+        // Liuvis ILlmClient interface and business services stay unchanged.
         // -------------------------------------------------------------------------
         services.AddTransient<ILlmClient>(sp =>
         {
             var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Liuvis.DI.Build");
-            var settings = SettingsService.GetCachedLlmSettings();
+            var configService = sp.GetRequiredService<ILLMConfigService>();
+            var (provider, model) = configService.GetDefaultModelInfoAsync().GetAwaiter().GetResult();
 
-            var displayModel = settings.Provider == "openai"
-                ? (settings.OpenAIModel ?? "unknown")
-                : (settings.OllamaModel ?? settings.OpenAIModel ?? "unknown");
-            logger.LogInformation("[DI.Build] LLM settings from DB: Provider={Provider}, BaseUrl={BaseUrl}, Model={Model}",
-                settings.Provider, settings.OpenAIBaseUrl, displayModel);
-
-            if (settings.Provider == "openai" && !string.IsNullOrWhiteSpace(settings.OpenAIApiKey))
+            if (provider is null || model is null)
             {
-                var model = settings.OpenAIModel ?? "gpt-4o";
-                var openAiLogger = sp.GetRequiredService<ILogger<OpenAIClient>>();
-
-                openAiLogger.LogInformation("[DI.Build] Using OpenAI provider: Endpoint={Endpoint}, Model={Model}",
-                    settings.OpenAIBaseUrl, model);
-                return new OpenAIClient(
-                    apiKey: settings.OpenAIApiKey,
-                    baseUrl: settings.OpenAIBaseUrl,
-                    model: model,
-                    embeddingModel: "text-embedding-3-small",
-                    logger: openAiLogger);
+                logger.LogWarning("[DI.Build] No default LLM provider/model configured in CJCore, falling back to local Ollama");
+                return new OllamaClient(new Uri("http://localhost:11434"), "qwen3:4b",
+                    sp.GetRequiredService<ILogger<OllamaClient>>());
             }
 
-            if (settings.Provider == "openai")
+            var modelName = model.ModelName;
+            var providerName = provider.Name;
+
+            if (string.Equals(providerName, "Ollama", StringComparison.OrdinalIgnoreCase))
             {
-                var ollamaLogger = sp.GetRequiredService<ILogger<OllamaClient>>();
-                ollamaLogger.LogWarning("[DI.Build] OpenAI selected but no API key configured, falling back to Ollama");
+                logger.LogInformation("[DI.Build] Using Ollama provider: {Url}, model: {Model}", provider.ApiBaseUrl, modelName);
+                return new OllamaClient(new Uri(provider.ApiBaseUrl), modelName,
+                    sp.GetRequiredService<ILogger<OllamaClient>>());
             }
 
-            var endpoint = new Uri(settings.OllamaUrl);
-            logger.LogInformation("[DI.Build] Using Ollama provider: {Url}, model: {Model}", settings.OllamaUrl, settings.OllamaModel);
-            return new OllamaClient(endpoint, settings.OllamaModel ?? "qwen3:4b",
-                sp.GetRequiredService<ILogger<OllamaClient>>());
+            // OpenAI / AzureOpenAI / DeepSeek / OmniRoute / Custom all speak the OpenAI-compatible protocol.
+            if (string.IsNullOrWhiteSpace(provider.ApiKey))
+            {
+                logger.LogWarning("[DI.Build] Provider {Provider} has no API key configured, falling back to local Ollama", providerName);
+                return new OllamaClient(new Uri("http://localhost:11434"), "qwen3:4b",
+                    sp.GetRequiredService<ILogger<OllamaClient>>());
+            }
+
+            var openAiLogger = sp.GetRequiredService<ILogger<OpenAIClient>>();
+            openAiLogger.LogInformation("[DI.Build] Using {Provider} provider: Endpoint={Endpoint}, Model={Model}",
+                providerName, provider.ApiBaseUrl, modelName);
+            return new OpenAIClient(
+                apiKey: provider.ApiKey,
+                baseUrl: provider.ApiBaseUrl,
+                model: modelName,
+                embeddingModel: "text-embedding-3-small",
+                logger: openAiLogger);
         });
 
         // -------------------------------------------------------------------------
@@ -181,6 +188,11 @@ public static class ServiceCollectionExtensions
                 var provider = (llm["Provider"] ?? "ollama").ToLowerInvariant();
                 var temperature = llm.GetValue<double?>("Temperature") ?? 0.3;
                 var maxTokens = llm.GetValue<int?>("MaxTokens") ?? 4096;
+
+                // LLM 配置管理 ApiClient 的 baseUrl：指向本进程 /api/llm/* 端点（配置于 Liuvis:Llm:ApiBaseUrl），
+                // 否则 AddCJCoreLLM 内部不会注册 ILlmConfigApiClient，LLMConfigPage 加载供应商会抛
+                // "无法解析 IModuleApiClient 实现 'CJCore.Modules.LLM.ApiClient.ILlmConfigApiClient'"。
+                options.ApiBaseUrl = llm["ApiBaseUrl"];
 
                 if (provider == "openai")
                 {
