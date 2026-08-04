@@ -9,6 +9,12 @@
     <Project Path="src/Liuvis.NLU/Liuvis.NLU.csproj" />
     <Project Path="src/Liuvis.Session/Liuvis.Session.csproj" />
     <Project Path="src/Liuvis.Web/Liuvis.Web.csproj" />
+    <Project Path="src/Liuvis.Agent/Liuvis.Agent.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/">
+    <Project Path="src/Modules/Liuvis.Modules.Settings.Api/Liuvis.Modules.Settings.Api.csproj" />
+    <Project Path="src/Modules/Liuvis.Modules.Settings.Model/Liuvis.Modules.Settings.Model.csproj" />
+    <Project Path="src/Modules/Liuvis.Modules.Settings.UI/Liuvis.Modules.Settings.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Liuvis.IntegrationTests/Liuvis.IntegrationTests.csproj" />

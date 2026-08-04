@@ -13,7 +13,7 @@ public class Model3DConfiguration : IEntityTypeConfiguration<Model3D>
         builder.HasKey(e => e.ModelId);
         builder.Property(e => e.ModelId).ValueGeneratedOnAdd();
         builder.Property(e => e.Name).IsRequired().HasMaxLength(512);
-        builder.Property(e => e.Description).HasMaxLength(4096);
+        builder.Property(e => e.Description);
         builder.Property(e => e.Format).HasConversion<string>().HasMaxLength(16);
         builder.Property(e => e.FilePath).HasMaxLength(2048);
         builder.Property(e => e.ThumbnailPath).HasMaxLength(2048);

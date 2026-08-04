@@ -1,0 +1,131 @@
+<div style="overflow-y: auto; max-height: calc(100vh - 260px); padding-right: 4px;">
+<MudCard Elevation="0" Class="mt-4">
+    <MudCardContent>
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
+            <MudText Typo="Typo.h6">System Prompt Templates</MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                Editable
+            </MudChip>
+        </div>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            These prompts control how the LLM behaves. Use <code>{{context}}</code>, <code>{{input}}</code>,
+            or <code>{{description}}</code> as placeholders. Changes take effect on next request.
+        </MudText>
+
+        <MudStack Spacing="4">
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">
+                    Intent Classification Prompt
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                        NLU
+                    </MudChip>
+                </MudText>
+                <MudTextField @bind-Value="_prompts.NluPrompt" Lines="12" Variant="Variant.Outlined"
+                    HelperText="Classifies user intent. Placeholders: {{context}}, {{input}}" />
+            </div>
+
+            <MudDivider />
+
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">
+                    Query Response Prompt
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                        Query
+                    </MudChip>
+                </MudText>
+                <MudTextField @bind-Value="_prompts.QueryPrompt" Lines="4" Variant="Variant.Outlined"
+                    HelperText="System message when answering user questions" />
+            </div>
+
+            <MudDivider />
+
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">
+                    Unknown Intent Prompt
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                        Unknown
+                    </MudChip>
+                </MudText>
+                <MudTextField @bind-Value="_prompts.UnknownPrompt" Lines="4" Variant="Variant.Outlined"
+                    HelperText="System message when intent is unclear" />
+            </div>
+
+            <MudDivider />
+
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-2 mud-text-secondary">
+                    3D Scene Generation Prompt
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                        Generation
+                    </MudChip>
+                </MudText>
+                <MudTextField @bind-Value="_prompts.SceneGenerationPrompt" Lines="16" Variant="Variant.Outlined"
+                    HelperText="Generates 3D scene JSON from description. Placeholder: {{description}}" />
+            </div>
+        </MudStack>
+    </MudCardContent>
+
+    <MudCardActions Class="pa-4">
+        <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+            OnClick="ResetPromptsAsync" Disabled="_savingPrompts"
+            StartIcon="@Icons.Material.Filled.Restore">
+            Reset to Defaults
+        </MudButton>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+            OnClick="SavePromptsAsync" Disabled="_savingPrompts"
+            StartIcon="@Icons.Material.Filled.Save">
+            @if (_savingPrompts) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Save Prompts
+        </MudButton>
+    </MudCardActions>
+</MudCard>
+</div>
+
+@code {
+    [Inject] private ISettingsService SettingsService { get; set; } = default!;
+    [Inject] private ILogger<LlmPromptsTab> Logger { get; set; } = default!;
+
+    private PromptSettings _prompts = new();
+    private bool _savingPrompts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _prompts = await SettingsService.GetPromptSettingsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[LlmPromptsTab] LoadData FAILED");
+        }
+    }
+
+    private async Task SavePromptsAsync()
+    {
+        _savingPrompts = true;
+        try
+        {
+            await SettingsService.SavePromptSettingsAsync(_prompts);
+        }
+        finally
+        {
+            _savingPrompts = false;
+        }
+    }
+
+    private async Task ResetPromptsAsync()
+    {
+        _savingPrompts = true;
+        try
+        {
+            await SettingsService.ResetPromptSettingsAsync();
+            _prompts = await SettingsService.GetPromptSettingsAsync();
+        }
+        finally
+        {
+            _savingPrompts = false;
+        }
+    }
+}

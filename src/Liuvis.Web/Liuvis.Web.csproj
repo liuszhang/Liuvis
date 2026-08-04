@@ -28,12 +28,17 @@
   <ItemGroup>
     <ProjectReference Include="..\Liuvis.Core\Liuvis.Core.csproj" />
     <ProjectReference Include="..\Liuvis.Infrastructure\Liuvis.Infrastructure.csproj" />
+    <ProjectReference Include="..\Liuvis.Agent\Liuvis.Agent.csproj" />
     <ProjectReference Include="..\Liuvis.NLU\Liuvis.NLU.csproj" />
     <ProjectReference Include="..\Liuvis.Session\Liuvis.Session.csproj" />
     <ProjectReference Include="..\Liuvis.Design\Liuvis.Design.csproj" />
     <ProjectReference Include="..\Liuvis.Generation\Liuvis.Generation.csproj" />
     <ProjectReference Include="..\Liuvis.Modification\Liuvis.Modification.csproj" />
     <ProjectReference Include="..\Liuvis.KnowledgeBase\Liuvis.KnowledgeBase.csproj" />
+    <ProjectReference Include="..\Modules\Liuvis.Modules.Settings.UI\Liuvis.Modules.Settings.UI.csproj" />
+    <ProjectReference Include="..\Modules\Liuvis.Modules.Settings.Api\Liuvis.Modules.Settings.Api.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Framework\CJCore.Framework\CJCore.Framework.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Modules\LLM\CJCore.Modules.LLM\CJCore.Modules.LLM.csproj" />
   </ItemGroup>
 
 </Project>

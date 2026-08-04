@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Liuvis.Agent</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Liuvis.Core\Liuvis.Core.csproj" />
+    <ProjectReference Include="..\Liuvis.Generation\Liuvis.Generation.csproj" />
+    <ProjectReference Include="..\Liuvis.Infrastructure\Liuvis.Infrastructure.csproj" />
+    <ProjectReference Include="..\Liuvis.NLU\Liuvis.NLU.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Modules\Agent\CJCore.Agent.Abstractions\CJCore.Agent.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Modules\AgentTool\CJCore.AgentTool.MCPTools\CJCore.AgentTool.MCPTools.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Modules\AgentTool\CJCore.AgentTool.Skills\CJCore.AgentTool.Skills.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Modules\LLM\CJCore.LLM.Abstractions\CJCore.LLM.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Modules\LLM\CJCore.LLM.LLMClient\CJCore.LLM.LLMClient.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Modules\AgentRegistry\CJCore.AgentRegistry.Client\CJCore.AgentRegistry.Client.csproj" />
+    <ProjectReference Include="..\..\..\CJCore\src\Framework\CJCore.Framework.Abstractions\CJCore.Framework.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

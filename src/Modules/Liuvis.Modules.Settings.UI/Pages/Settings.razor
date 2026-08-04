@@ -1,0 +1,27 @@
+@page "/settings"
+@rendermode InteractiveServer
+@using CJCore.Modules.LLM.UI.Pages
+
+<MudText Typo="Typo.h4" Class="pa-4">Settings</MudText>
+
+<MudTabs Elevation="0" Class="px-4">
+    <MudTabPanel Text="LLM Configuration">
+        <LLMConfigPage />
+    </MudTabPanel>
+
+    <MudTabPanel Text="General">
+        <GeneralTab />
+    </MudTabPanel>
+
+    <MudTabPanel Text="模型生成配置">
+        <GenerationConfigTab />
+    </MudTabPanel>
+
+    <MudTabPanel Text="LLM Prompts">
+        <LlmPromptsTab />
+    </MudTabPanel>
+
+    <MudTabPanel Text="工具与技能">
+        <ToolsSkillsTab />
+    </MudTabPanel>
+</MudTabs>
