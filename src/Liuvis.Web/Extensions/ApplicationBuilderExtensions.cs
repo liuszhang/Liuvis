@@ -234,6 +234,22 @@ public static class ApplicationBuilderExtensions
                     ) THEN
                         ALTER TABLE models ALTER COLUMN "Description" TYPE text;
                     END IF;
+
+                    -- 4. knowledge_entries.OntologyCode: 阶段五新增（本体关联 Code，string? → text）
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'knowledge_entries' AND column_name = 'OntologyCode'
+                    ) THEN
+                        ALTER TABLE knowledge_entries ADD COLUMN "OntologyCode" text;
+                    END IF;
+
+                    -- 5. knowledge_entries.SourceType: 阶段五新增（知识来源枚举，int，默认 ModelDescription=0）
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'knowledge_entries' AND column_name = 'SourceType'
+                    ) THEN
+                        ALTER TABLE knowledge_entries ADD COLUMN "SourceType" integer NOT NULL DEFAULT 0;
+                    END IF;
                 END $$;
                 """);
             logger.LogInformation("Database schema upgrades applied successfully");
