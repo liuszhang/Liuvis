@@ -19,6 +19,7 @@ public class OpenAIClient : ILlmClient
     private readonly string _model;
     private readonly string _embeddingModel;
     private readonly ILogger<OpenAIClient> _logger;
+    private readonly bool _enableEmbeddings;
     private global::OpenAI.OpenAIClient? _openAiClient;
 
     public OpenAIClient(
@@ -26,13 +27,15 @@ public class OpenAIClient : ILlmClient
         string baseUrl,
         string model,
         string embeddingModel,
-        ILogger<OpenAIClient> logger)
+        ILogger<OpenAIClient> logger,
+        bool enableEmbeddings = true)
     {
         _apiKey = apiKey;
         _baseUrl = NormalizeEndpoint(baseUrl);
         _model = model;
         _embeddingModel = embeddingModel;
         _logger = logger;
+        _enableEmbeddings = enableEmbeddings;
     }
 
     private global::OpenAI.OpenAIClient Client
@@ -106,6 +109,14 @@ public class OpenAIClient : ILlmClient
     public async Task<float[]> GetEmbeddingAsync(string text,
         CancellationToken cancellationToken = default)
     {
+        // Embeddings disabled (Liuvis:Embeddings:Enabled = false): skip the network
+        // call entirely and return a zero vector. No provider/credentials needed.
+        if (!_enableEmbeddings)
+        {
+            _logger.LogDebug("Embeddings disabled — returning zero vector without calling provider");
+            return new float[1536];
+        }
+
         _logger.LogDebug("OpenAI GetEmbeddingAsync: model={Model}, text len={Len}", _embeddingModel, text.Length);
 
         try

@@ -12,12 +12,14 @@ public class OllamaClient : ILlmClient
     private readonly Uri _endpoint;
     private readonly string _model;
     private readonly ILogger<OllamaClient> _logger;
+    private readonly bool _enableEmbeddings;
 
-    public OllamaClient(Uri endpoint, string model, ILogger<OllamaClient> logger)
+    public OllamaClient(Uri endpoint, string model, ILogger<OllamaClient> logger, bool enableEmbeddings = true)
     {
         _endpoint = endpoint;
         _model = model;
         _logger = logger;
+        _enableEmbeddings = enableEmbeddings;
     }
 
     public async Task<string> CompleteAsync(string prompt, string? systemMessage = null,
@@ -51,6 +53,12 @@ public class OllamaClient : ILlmClient
     public async Task<float[]> GetEmbeddingAsync(string text,
         CancellationToken cancellationToken = default)
     {
+        if (!_enableEmbeddings)
+        {
+            _logger.LogDebug("Embeddings disabled — returning zero vector without calling provider");
+            return new float[1536];
+        }
+
         _logger.LogWarning("GetEmbeddingAsync: returning zero vector (Ollama embeddings not configured)");
         return new float[1536];
     }

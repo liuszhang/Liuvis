@@ -29,6 +29,18 @@
     private string? _lastScene;
     private bool _lastIsStl;
 
+    /// <summary>
+    /// Detect STL by file extension so the correct loader (STLLoader vs GLTFLoader)
+    /// is chosen even when a caller omits the IsStl parameter. Query strings / fragments
+    /// are stripped before the extension check.
+    /// </summary>
+    private static bool UrlLooksLikeStl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return false;
+        var path = url.Split('?', '#')[0];
+        return path.EndsWith(".stl", StringComparison.OrdinalIgnoreCase);
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!RendererInfo.IsInteractive) return;
@@ -52,9 +64,14 @@
 
         try
         {
+            // Decide the loader from the URL extension (authoritative) OR the IsStl hint.
+            // This prevents STL files from being fed to the GLTF loader — which crashes on
+            // JSON.parse — e.g. when a caller (Models.razor) omits the IsStl parameter.
+            var isStl = IsStl || UrlLooksLikeStl(ModelUrl);
+
             // Check if we need to load an STL file
-            if (IsStl && !string.IsNullOrEmpty(ModelUrl) && ModelUrl.StartsWith("/") && 
-                (ModelUrl != _lastUrl || _lastIsStl != IsStl))
+            if (isStl && !string.IsNullOrEmpty(ModelUrl) && ModelUrl.StartsWith("/") &&
+                (ModelUrl != _lastUrl || _lastIsStl != isStl))
             {
                 _lastUrl = ModelUrl;
                 _lastScene = null;
@@ -72,8 +89,8 @@
                 await _module.InvokeVoidAsync("buildFromSceneDescription", SceneData);
             }
             // Check if we need to load a GLB file
-            else if (!string.IsNullOrEmpty(ModelUrl) && ModelUrl.StartsWith("/") && 
-                     !IsStl && ModelUrl != _lastUrl)
+            else if (!string.IsNullOrEmpty(ModelUrl) && ModelUrl.StartsWith("/") &&
+                     !isStl && ModelUrl != _lastUrl)
             {
                 _lastUrl = ModelUrl;
                 _lastScene = null;

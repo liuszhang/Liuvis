@@ -70,11 +70,16 @@ public static class ServiceCollectionExtensions
             var configService = sp.GetRequiredService<ILLMConfigService>();
             var (provider, model) = configService.GetDefaultModelInfoAsync().GetAwaiter().GetResult();
 
+            // Embeddings can be disabled globally (Liuvis:Embeddings:Enabled = false)
+            // when no embedding provider is available — callers then get a zero vector
+            // without any network request.
+            var enableEmbeddings = configuration.GetValue<bool>("Liuvis:Embeddings:Enabled");
+
             if (provider is null || model is null)
             {
                 logger.LogWarning("[DI.Build] No default LLM provider/model configured in CJCore, falling back to local Ollama");
                 return new OllamaClient(new Uri("http://localhost:11434"), "qwen3:4b",
-                    sp.GetRequiredService<ILogger<OllamaClient>>());
+                    sp.GetRequiredService<ILogger<OllamaClient>>(), enableEmbeddings);
             }
 
             var modelName = model.ModelName;
@@ -84,7 +89,7 @@ public static class ServiceCollectionExtensions
             {
                 logger.LogInformation("[DI.Build] Using Ollama provider: {Url}, model: {Model}", provider.ApiBaseUrl, modelName);
                 return new OllamaClient(new Uri(provider.ApiBaseUrl), modelName,
-                    sp.GetRequiredService<ILogger<OllamaClient>>());
+                    sp.GetRequiredService<ILogger<OllamaClient>>(), enableEmbeddings);
             }
 
             // OpenAI / AzureOpenAI / DeepSeek / OmniRoute / Custom all speak the OpenAI-compatible protocol.
@@ -92,18 +97,27 @@ public static class ServiceCollectionExtensions
             {
                 logger.LogWarning("[DI.Build] Provider {Provider} has no API key configured, falling back to local Ollama", providerName);
                 return new OllamaClient(new Uri("http://localhost:11434"), "qwen3:4b",
-                    sp.GetRequiredService<ILogger<OllamaClient>>());
+                    sp.GetRequiredService<ILogger<OllamaClient>>(), enableEmbeddings);
             }
 
             var openAiLogger = sp.GetRequiredService<ILogger<OpenAIClient>>();
             openAiLogger.LogInformation("[DI.Build] Using {Provider} provider: Endpoint={Endpoint}, Model={Model}",
                 providerName, provider.ApiBaseUrl, modelName);
+
+            // Embedding model is configurable (appsettings "OpenAI:EmbeddingModel");
+            // defaults to OpenAI text-embedding-3-small. It is sent to the same
+            // provider endpoint as chat — if that provider cannot serve the chosen
+            // embedding model, embeddings fail (see OmniRoute "no credentials" case).
+            var embeddingModel = configuration.GetValue<string>("OpenAI:EmbeddingModel")
+                ?? "text-embedding-3-small";
+
             return new OpenAIClient(
                 apiKey: provider.ApiKey,
                 baseUrl: provider.ApiBaseUrl,
                 model: modelName,
-                embeddingModel: "text-embedding-3-small",
-                logger: openAiLogger);
+                embeddingModel: embeddingModel,
+                logger: openAiLogger,
+                enableEmbeddings: enableEmbeddings);
         });
 
         // -------------------------------------------------------------------------
