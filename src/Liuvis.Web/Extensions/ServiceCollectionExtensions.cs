@@ -264,9 +264,6 @@ public static class ServiceCollectionExtensions
         // ---- IToolRegistry（框架默认实现，静态工具池来自已注册 IToolExecutor） ----
         services.AddSingleton<IToolRegistry, DefaultToolRegistry>();
 
-        // ---- 阶段三：本体增强设计服务（生成链路增强） ----
-        services.AddScoped<OntologyEnhancedDesignService>();
-
         // ---- 阶段五：本体知识工件导入器（启动预热 + refresh 端点增量同步） ----
         services.AddScoped<OntologyKnowledgeImporter>();
 

@@ -1,6 +1,7 @@
 using Liuvis.Core.DTOs.Responses;
 using Liuvis.Core.Enums;
 using Liuvis.Core.Interfaces;
+using Liuvis.Core.Ontology;
 using Liuvis.Modules.Settings;
 using Liuvis.Core.ValueObjects;
 using Liuvis.Generation.Services;
@@ -23,6 +24,7 @@ public class ChatOrchestrationService
     private readonly IModificationEngine _modificationEngine;
     private readonly ILlmClient _llmClient;
     private readonly ISettingsService _settingsService;
+    private readonly IOntologyContextService _ontology;
     private readonly IHubContext<DesignHub> _hub;
     private readonly ILogger<ChatOrchestrationService> _logger;
 
@@ -35,6 +37,7 @@ public class ChatOrchestrationService
         IModificationEngine modificationEngine,
         ILlmClient llmClient,
         ISettingsService settingsService,
+        IOntologyContextService ontology,
         IHubContext<DesignHub> hub,
         ILogger<ChatOrchestrationService> logger)
     {
@@ -46,6 +49,7 @@ public class ChatOrchestrationService
         _modificationEngine = modificationEngine;
         _llmClient = llmClient;
         _settingsService = settingsService;
+        _ontology = ontology;
         _hub = hub;
         _logger = logger;
     }
@@ -123,6 +127,9 @@ public class ChatOrchestrationService
         await NotifyProgress(sessionId, "Generating 3D geometry with AI...");
         var model = await _modelGenerator.GenerateModel(spec, ct);
 
+        // P2（硬约束）：生成后 M3 规则校验——违规自动修正一次，校验提示并入会话消息（fail-soft）
+        (model, var ruleAdvisory) = await ValidateAndAutoFixSceneAsync(sessionId, spec, model, ct);
+
         await NotifyProgress(sessionId, "Indexing model in knowledge base...");
         try
         {
@@ -135,8 +142,11 @@ public class ChatOrchestrationService
 
         await _sessionManager.UpdateModelRef(sessionId, model.ModelId, ct);
 
-        var assistantMsg = await _sessionManager.AddMessage(sessionId, MessageRole.Assistant,
-            $"Created model: {model.Name} ({model.Components.Count} components)", ct);
+        var assistantText = $"Created model: {model.Name} ({model.Components.Count} components)";
+        if (!string.IsNullOrEmpty(ruleAdvisory))
+            assistantText += "\n\n" + ruleAdvisory;
+
+        var assistantMsg = await _sessionManager.AddMessage(sessionId, MessageRole.Assistant, assistantText, ct);
 
         await NotifyModelReady(sessionId, model);
 
@@ -144,7 +154,7 @@ public class ChatOrchestrationService
         {
             SessionId = sessionId,
             MessageId = assistantMsg.MessageId,
-            AssistantMessage = $"Created 3D model: **{model.Name}** with {model.Components.Count} component(s).",
+            AssistantMessage = assistantText,
             IntentType = intent.IntentType,
             ModelId = model.ModelId,
             ModelName = model.Name,
@@ -154,6 +164,115 @@ public class ChatOrchestrationService
                 ? model.Metadata.ToDictionary(kv => kv.Key, kv => (object)kv.Value)
                 : null
         };
+    }
+
+    /// <summary>
+    /// P2（硬约束，阶段二）：对已生成的场景执行 M3 规则校验（POST /api/m3/evaluate）。
+    /// fail-soft：CJOntology 不可用/校验异常时静默跳过，不中断、不抛异常（D4）。
+    /// 违规时自动修正一次（将违规反馈并入描述重新生成）并在返回提示文本中告知用户。
+    /// </summary>
+    private async Task<(Liuvis.Core.Entities.Model3D Model, string? RuleAdvisory)> ValidateAndAutoFixSceneAsync(
+        Guid sessionId, DesignSpec spec, Liuvis.Core.Entities.Model3D model, CancellationToken ct)
+    {
+        var sceneJson = model.Metadata.TryGetValue("_scene", out var raw) ? raw : null;
+        if (string.IsNullOrWhiteSpace(sceneJson))
+            return (model, null);
+
+        List<OntologyRuleEvaluationResult> violations;
+        try
+        {
+            if (!await _ontology.IsAvailableAsync(ct))
+                return (model, null);
+
+            violations = await EvaluateViolationsAsync(sceneJson, ct);
+        }
+        catch (Exception ex)
+        {
+            // D4: 校验不可用/失败时静默降级，不影响原生成结果
+            _logger.LogWarning(ex, "P2 M3 rule evaluation skipped (fail-soft): {Message}", ex.Message);
+            return (model, null);
+        }
+
+        if (violations.Count == 0)
+        {
+            model.Metadata["_ruleCheck"] = "passed";
+            return (model, null);
+        }
+
+        _logger.LogInformation("P2 M3 rule check reported {ViolationCount} violation(s); auto-fixing once", violations.Count);
+
+        // 自动修正一次：将违规项与修复说明并入用户描述，重新走生成管线
+        var fixPrompt = BuildRuleFixPrompt(spec.Intent.OriginalText, violations);
+        var fixedIntent = spec.Intent with { OriginalText = fixPrompt };
+        var fixedSpec = spec with { Intent = fixedIntent };
+        var fixedModel = await _modelGenerator.GenerateModel(fixedSpec, ct);
+
+        // 修正后复检一次
+        var advisory = FormatRuleAdvisory(violations, remaining: null);
+        var fixedSceneJson = fixedModel.Metadata.TryGetValue("_scene", out var fixRaw) ? fixRaw : null;
+        if (!string.IsNullOrWhiteSpace(fixedSceneJson))
+        {
+            try
+            {
+                var remaining = await EvaluateViolationsAsync(fixedSceneJson, ct);
+                fixedModel.Metadata["_ruleCheck"] = remaining.Count == 0 ? "passed" : "violated";
+                advisory = FormatRuleAdvisory(violations, remaining);
+                _logger.LogInformation(
+                    remaining.Count == 0
+                        ? "P2 auto-fix succeeded; generated scene now complies with M3 rules"
+                        : "P2 auto-fix still has {RemainingCount} violation(s)",
+                    remaining.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "P2 post-fix re-evaluation skipped (fail-soft): {Message}", ex.Message);
+            }
+        }
+        else
+        {
+            fixedModel.Metadata["_ruleCheck"] = "violated";
+        }
+
+        return (fixedModel, advisory);
+    }
+
+    /// <summary>对场景 JSON 执行 M3 求值，返回违规项列表。</summary>
+    private async Task<List<OntologyRuleEvaluationResult>> EvaluateViolationsAsync(string sceneJson, CancellationToken ct)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(sceneJson);
+        var results = await _ontology.EvaluateRuleAsync(
+            doc.RootElement, instanceType: null, parameters: null, cancellationToken: ct);
+        return results.Where(r => r.Violated).ToList();
+    }
+
+    /// <summary>构造自动修正用的生成描述：原描述 + M3 违规项与修复建议。</summary>
+    private static string BuildRuleFixPrompt(
+        string originalDescription, IReadOnlyList<OntologyRuleEvaluationResult> violations)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(originalDescription);
+        sb.AppendLine();
+        sb.AppendLine("请根据以下 M3 企业设计规则自动修正上述三维设计（修正后仅输出符合规则的 JSON 场景定义，不要解释）：");
+        foreach (var v in violations)
+        {
+            sb.AppendLine($"- [违规 {v.RuleCode}] {v.RuleName}（{v.Severity}）：{v.Message}");
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>构造面向用户的规则校验提示文本（remaining 为空表示修正后通过）。</summary>
+    private static string FormatRuleAdvisory(
+        IReadOnlyList<OntologyRuleEvaluationResult> initialViolations,
+        IReadOnlyList<OntologyRuleEvaluationResult>? remaining)
+    {
+        if (remaining != null && remaining.Count == 0)
+            return "M3 设计规则校验：已自动修正违规项，生成结果符合企业设计规则。";
+
+        var shown = remaining ?? initialViolations;
+        var lines = shown.Select(v => $"- [{v.RuleCode}] {v.RuleName}（{v.Severity}）：{v.Message}");
+        return remaining == null
+            ? "M3 设计规则校验发现违规，已尝试自动修正一次：\n" + string.Join("\n", lines)
+            : "M3 设计规则校验：以下规则仍未满足（已尝试自动修正一次）：\n" + string.Join("\n", lines);
     }
 
     private async Task<ChatResponse> HandleModifyAsync(

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Liuvis.Core.Interfaces;
+using Liuvis.Core.Ontology;
 using Liuvis.Modules.Settings;
 using Microsoft.Extensions.Logging;
 
@@ -13,13 +14,19 @@ public class LLMDesignService
 {
     private readonly ILlmClient _llmClient;
     private readonly ISettingsService _settingsService;
+    private readonly IOntologyContextService _ontology;
     private readonly ILogger<LLMDesignService> _logger;
     private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
 
-    public LLMDesignService(ILlmClient llmClient, ISettingsService settingsService, ILogger<LLMDesignService> logger)
+    public LLMDesignService(
+        ILlmClient llmClient,
+        ISettingsService settingsService,
+        IOntologyContextService ontology,
+        ILogger<LLMDesignService> logger)
     {
         _llmClient = llmClient;
         _settingsService = settingsService;
+        _ontology = ontology;
         _logger = logger;
     }
 
@@ -28,7 +35,8 @@ public class LLMDesignService
         _logger.LogInformation("LLM generating scene from: {Description}", description[..Math.Min(description.Length, 100)]);
 
         var promptSettings = await _settingsService.GetPromptSettingsAsync(ct);
-        var prompt = promptSettings.SceneGenerationPrompt.Replace("{{description}}", description);
+        var prompt = await EnrichWithOntologyAsync(promptSettings.SceneGenerationPrompt, ct);
+        prompt = prompt.Replace("{{description}}", description);
         var response = await _llmClient.CompleteAsync(prompt, null, ct);
         var json = ExtractJson(response);
 
@@ -62,6 +70,51 @@ public class LLMDesignService
                 }
             }
         };
+    }
+
+    /// <summary>
+    /// 在生成 prompt 中填充本体上下文（{{ontologyContext}}）与 M3 设计规则（{{designRules}}）。
+    /// fail-soft：CJOntology 不可用/异常时静默降级——占位符替换为空串，不抛异常、不中断原生成。
+    /// </summary>
+    private async Task<string> EnrichWithOntologyAsync(string prompt, CancellationToken ct)
+    {
+        string ontologyContext = string.Empty;
+        string designRules = string.Empty;
+
+        try
+        {
+            if (await _ontology.IsAvailableAsync(ct))
+            {
+                ontologyContext = await _ontology.GetOntologySummaryAsync(ct) ?? string.Empty;
+                var rules = await _ontology.GetRulesAsync(cancellationToken: ct);
+                designRules = FormatRules(rules);
+                _logger.LogInformation(
+                    "Ontology context injected into scene prompt (ontologyLength={OntologyLength}, rules={RuleCount})",
+                    ontologyContext.Length, rules?.Count ?? 0);
+            }
+            else
+            {
+                _logger.LogDebug("Ontology service unavailable; scene prompt placeholders left empty (fail-soft)");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to enrich scene prompt with ontology context, placeholders left empty (fail-soft)");
+        }
+
+        // 无论是否降级，占位符都必须被消费，避免字面 {{...}} 作为噪声传给 LLM
+        prompt = prompt.Replace("{{ontologyContext}}", ontologyContext);
+        prompt = prompt.Replace("{{designRules}}", designRules);
+        return prompt;
+    }
+
+    private static string FormatRules(IReadOnlyList<OntologyRuleInfo>? rules)
+    {
+        if (rules == null || rules.Count == 0)
+            return string.Empty;
+
+        return string.Join("\n", rules.Select(r =>
+            $"- [{r.Kind}] {r.Name} ({r.Severity}) → {r.TargetType}.{r.TargetCode}"));
     }
 
     private static string ExtractJson(string raw)
